@@ -103,7 +103,11 @@ export const runHybridSearch = async (input: {
     FROM (SELECT id FROM vec UNION SELECT id FROM kw) ids
     LEFT JOIN vec ON vec.id = ids.id
     LEFT JOIN kw ON kw.id = ids.id
-    ORDER BY score DESC
+    -- When two chunks land on the same fused score (common for a rare exact
+    -- term, where each arm contributes a lone rank-1 hit), prefer the better
+    -- keyword match, then the better vector match. Without this, a vague
+    -- semantic-only hit can edge out an exact keyword match on a coin-flip.
+    ORDER BY score DESC, kw.rank ASC NULLS LAST, vec.rank ASC NULLS LAST
     LIMIT ${resultLimit}
   `;
 
