@@ -1,0 +1,55 @@
+generator client {
+  provider        = "prisma-client"
+  output          = "../src/generated/prisma"
+  previewFeatures = ["postgresqlExtensions", "typedSql"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  extensions = [vector]
+}
+
+/// One wiki page. Attribution (title, sourceUrl, pageId) plus the derived
+/// facets used for filtering, and the fields that drive incremental sync
+/// (lastRevId + contentHash). Full text lives in the child chunks.
+model Document {
+  id          String   @id @default(cuid())
+  pageId      Int      @unique
+  title       String
+  sourceUrl   String
+  lastRevId   Int
+  contentHash String
+  categories  String[]
+  realm       String?
+  sphere      String?
+  pageType    String
+  seasons     String[]
+  fetchedAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  chunks      Chunk[]
+
+  @@index([realm])
+  @@index([sphere])
+  @@index([pageType])
+}
+
+/// A retrieval unit: one section-aware slice of a Document. `embedding` and
+/// `searchVector` are Postgres extension types Prisma cannot model natively,
+/// so they are declared Unsupported and driven by raw SQL. `searchVector` is
+/// turned into a generated tsvector column, and both get their indexes, in the
+/// migration (Prisma cannot express generated columns or an HNSW index).
+model Chunk {
+  id           String   @id @default(cuid())
+  documentId   String
+  document     Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  ordinal      Int
+  headingPath  String
+  text         String
+  tokenCount   Int
+  charStart    Int
+  charEnd      Int
+  embedding    Unsupported("vector(384)")?
+  searchVector Unsupported("tsvector")?
+
+  @@index([documentId])
+}
