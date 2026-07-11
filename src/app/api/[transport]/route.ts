@@ -38,6 +38,10 @@ const mcpHandler = createMcpHandler(
             .describe(
               "Filter to a page type: rules, lore, newsletter, history, war-report, fiction.",
             ),
+          season: z
+            .string()
+            .optional()
+            .describe("Filter to a season, e.g. 'Winter 226'."),
           limit: z
             .number()
             .int()
@@ -47,10 +51,10 @@ const mcpHandler = createMcpHandler(
             .describe("Maximum results (default 10)."),
         },
       },
-      async ({ query, realm, sphere, pageType, limit }) => {
+      async ({ query, realm, sphere, pageType, season, limit }) => {
         const results = await runHybridSearch({
           query,
-          filters: { realm, sphere, pageType },
+          filters: { realm, sphere, pageType, season },
           limit,
         });
 

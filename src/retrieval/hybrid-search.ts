@@ -28,6 +28,7 @@ export type SearchFilters = {
   realm?: string;
   sphere?: string;
   pageType?: string;
+  season?: string;
 };
 
 export type SearchResult = {
@@ -66,6 +67,7 @@ export const runHybridSearch = async (input: {
   const realm = filters.realm ?? null;
   const sphere = filters.sphere ?? null;
   const pageType = filters.pageType ?? null;
+  const season = filters.season ?? null;
 
   const queryVector = await embedText(query, "query");
   const vectorLiteral = JSON.stringify(queryVector);
@@ -79,6 +81,7 @@ export const runHybridSearch = async (input: {
       WHERE (${realm}::text IS NULL OR d.realm = ${realm})
         AND (${sphere}::text IS NULL OR d.sphere = ${sphere})
         AND (${pageType}::text IS NULL OR d."pageType" = ${pageType})
+        AND (${season}::text IS NULL OR ${season} = ANY(d.seasons))
     ),
     vec AS (
       SELECT id, ROW_NUMBER() OVER (ORDER BY embedding <=> ${vectorLiteral}::vector) AS rank
