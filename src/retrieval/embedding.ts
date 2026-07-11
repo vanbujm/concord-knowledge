@@ -38,6 +38,10 @@ const IS_SERVERLESS = Boolean(process.env.VERCEL);
 if (IS_SERVERLESS) {
   env.cacheDir = "/tmp/transformers-cache";
   env.allowLocalModels = false;
+} else if (process.env.TRANSFORMERS_CACHE_DIR) {
+  // In CI the ingestion job points this at a directory it caches between runs,
+  // so the ~130MB model is downloaded once rather than on every run.
+  env.cacheDir = process.env.TRANSFORMERS_CACHE_DIR;
 }
 
 // bge retrieval models expect this instruction prepended to queries only, not

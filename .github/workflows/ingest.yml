@@ -1,0 +1,56 @@
+name: Ingest wiki
+
+# Keeps the search corpus fresh. Each run first checks the wiki for changed
+# revisions and only re-embeds when something actually moved, so idle days
+# finish in seconds without loading the model or fetching page content.
+on:
+  schedule:
+    # Daily at 15:37 UTC. The minute is off the hour, which GitHub recommends to
+    # avoid the top-of-hour scheduling backlog.
+    - cron: "37 15 * * *"
+  workflow_dispatch:
+
+# Never let a manual run overlap a scheduled one against the same database.
+concurrency:
+  group: ingest
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      # The embedding model is downloaded here so actions/cache can persist it
+      # between runs instead of re-downloading ~130MB each time.
+      TRANSFORMERS_CACHE_DIR: ${{ github.workspace }}/.transformers-cache
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.9"
+
+      - name: Cache embedding model
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.transformers-cache
+          # The key tracks embedding.ts, so changing the model or dtype pulls a
+          # fresh download; the restore-key still reuses a prior model otherwise.
+          key: transformers-model-${{ hashFiles('src/retrieval/embedding.ts') }}
+          restore-keys: |
+            transformers-model-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: bunx prisma generate
+
+      - name: Ingest
+        run: bun run ingest
