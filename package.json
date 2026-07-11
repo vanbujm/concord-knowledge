@@ -4,13 +4,14 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "ingest": "bun src/ingest/cli.ts"
+    "ingest": "bun src/ingest/cli.ts",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",
