@@ -37,7 +37,8 @@ const eslintConfig = defineConfig([
   {
     rules: {
       "no-restricted-syntax": ["error", ...noFunctionOrBarrel, ...noTypeCasts],
-      "id-length": ["error", { min: 2, properties: "never" }],
+      // `z` is the conventional Zod namespace alias.
+      "id-length": ["error", { min: 2, properties: "never", exceptions: ["z"] }],
     },
   },
   {
