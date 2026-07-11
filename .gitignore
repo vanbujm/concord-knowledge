@@ -1,0 +1,54 @@
+# macOS
+.DS_Store
+
+# Dependencies
+node_modules/
+
+# Next.js
+/.next/
+/out/
+/build
+
+# Testing
+/coverage
+
+# Environment variables
+.env
+.env.*
+!.env.example
+.vercel
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# Prisma (generated client)
+/src/generated/prisma
+
+# Debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Editor
+.idea
+
+# Python (wiki sync tooling)
+__pycache__/
+*.pyc
+.venv/
+
+# Claude Code
+.claude/settings.local.json
+.claude/worktrees
+.claude/projects
+.claude/scheduled_tasks.lock
+
+# Kept local, never pushed to the public remote:
+# the scraped wiki corpus (regenerable via scripts/sync_wiki.py), the sync
+# tooling, and all top-level project markdown (CLAUDE.md, README, planning docs).
+/wiki/
+/scripts/
+/*.md
+/.agents/README.md
