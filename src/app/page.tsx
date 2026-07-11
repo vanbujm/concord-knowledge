@@ -1,17 +1,44 @@
-const Home = () => {
+import { listFacets } from "@/retrieval/facets";
+
+import { SearchForm } from "./search-form";
+
+// The server shell: it loads the facet values (realms, spheres, page types,
+// seasons with their counts) on the server and hands them to the client search
+// island, which owns the query box, the filters, and fetching /api/search.
+const Home = async () => {
+  const facets = await listFacets();
+
   return (
-    <main className="mx-auto flex min-h-full max-w-2xl flex-col items-center justify-center gap-4 px-6 py-24 text-center">
-      <p className="text-sm font-medium uppercase tracking-widest text-muted-foreground">
-        Concord LARP
-      </p>
+    <main className="mx-auto flex min-h-full w-full max-w-3xl flex-col gap-8 px-6 py-12 sm:py-20">
+      <header className="flex flex-col gap-2">
+        <p className="text-sm font-medium uppercase tracking-widest text-muted-foreground">
+          Concord LARP
+        </p>
 
-      <h1 className="text-4xl font-semibold tracking-tight text-foreground">
-        Concord Wiki Search
-      </h1>
+        <h1 className="text-3xl font-semibold tracking-tight text-foreground">
+          Concord Wiki Search
+        </h1>
 
-      <p className="max-w-md text-lg text-muted-foreground">
-        Fast, cited search across the Concord wiki. Web and MCP, coming soon.
-      </p>
+        <p className="max-w-xl text-muted-foreground">
+          Hybrid keyword and semantic search across the Concord wiki. Every
+          result is a short excerpt that links back to the full page.
+        </p>
+      </header>
+
+      <SearchForm facets={facets} />
+
+      <footer className="mt-auto pt-8 text-xs text-muted-foreground">
+        Results are short excerpts from the{" "}
+        <a
+          href="https://wiki.concordlarp.com"
+          target="_blank"
+          rel="noreferrer"
+          className="underline underline-offset-2 hover:text-foreground"
+        >
+          Concord wiki
+        </a>
+        . Follow each link for the full, canonical page.
+      </footer>
     </main>
   );
 };
