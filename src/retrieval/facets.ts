@@ -17,15 +17,17 @@ const SEASON_ORDER = ["Spring", "Summer", "Autumn", "Winter"];
 const byCountDescending = (first: FacetCount, second: FacetCount): number =>
   second.count - first.count;
 
-const chronologically = (first: FacetCount, second: FacetCount): number => {
+// Newest season first: the most recent in-world events are the most relevant,
+// so they sit at the top of the season filter.
+const byRecency = (first: FacetCount, second: FacetCount): number => {
   const [firstSeason, firstYear] = first.value.split(" ");
   const [secondSeason, secondYear] = second.value.split(" ");
 
   if (firstYear !== secondYear) {
-    return Number(firstYear) - Number(secondYear);
+    return Number(secondYear) - Number(firstYear);
   }
 
-  return SEASON_ORDER.indexOf(firstSeason) - SEASON_ORDER.indexOf(secondSeason);
+  return SEASON_ORDER.indexOf(secondSeason) - SEASON_ORDER.indexOf(firstSeason);
 };
 
 export const listFacets = async (): Promise<Facets> => {
@@ -77,6 +79,6 @@ export const listFacets = async (): Promise<Facets> => {
     realms: realms.sort(byCountDescending),
     spheres: spheres.sort(byCountDescending),
     pageTypes: pageTypes.sort(byCountDescending),
-    seasons: seasons.sort(chronologically),
+    seasons: seasons.sort(byRecency),
   };
 };
