@@ -6,6 +6,7 @@ import {
   chunkIntoBatches,
   fetchAllPageStubs,
   fetchPageContents,
+  fetchPageRevisions,
   fetchWikiPages,
 } from "@/ingest/fetch-wiki";
 
@@ -151,6 +152,45 @@ describe("fetchPageContents", () => {
 
     expect(receivedBatchSizes).toEqual([50, 50, 20]);
     expect(pages).toHaveLength(120);
+  });
+});
+
+describe("fetchPageRevisions", () => {
+  it("maps page id to latest revision id across continue tokens", async () => {
+    server.use(
+      http.get(API_URL, ({ request }) => {
+        const requestUrl = new URL(request.url);
+        const gapcontinue = requestUrl.searchParams.get("gapcontinue");
+
+        if (!gapcontinue) {
+          return HttpResponse.json({
+            query: {
+              pages: [
+                { pageid: 1, title: "Alpha", lastrevid: 100 },
+                { pageid: 2, title: "Beta", lastrevid: 200 },
+              ],
+            },
+            continue: { gapcontinue: "Gamma", continue: "gapcontinue||" },
+          });
+        }
+
+        return HttpResponse.json({
+          query: {
+            pages: [{ pageid: 3, title: "Gamma", lastrevid: 300 }],
+          },
+        });
+      }),
+    );
+
+    const revisions = await fetchPageRevisions();
+
+    expect(revisions).toEqual(
+      new Map([
+        [1, 100],
+        [2, 200],
+        [3, 300],
+      ]),
+    );
   });
 });
 

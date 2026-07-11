@@ -64,6 +64,18 @@ const pageContentsResponseSchema = z.object({
   }),
 });
 
+const pageInfoSchema = z.object({
+  pageid: z.number(),
+  lastrevid: z.number(),
+});
+
+const pageRevisionsResponseSchema = z.object({
+  query: z.object({
+    pages: z.array(pageInfoSchema),
+  }),
+  continue: z.record(z.string(), z.string()).optional(),
+});
+
 export type WikiPage = {
   pageId: number;
   title: string;
@@ -212,6 +224,41 @@ export const fetchPageContents = async (
   }
 
   return pages;
+};
+
+// Fetch only each page's latest revision id (no wikitext), keyed by page id.
+// The daily ingest calls this first: comparing these ids against what is stored
+// tells it whether anything changed before it loads the embedding model or
+// fetches any content. generator=allpages + prop=info does it in one light
+// paginated query over the whole content namespace.
+export const fetchPageRevisions = async (): Promise<Map<number, number>> => {
+  const revisions = new Map<number, number>();
+
+  let continueParams: Record<string, string> | undefined;
+
+  do {
+    const data = await apiGet(
+      {
+        action: "query",
+        generator: "allpages",
+        gapnamespace: "0",
+        gaplimit: "500",
+        prop: "info",
+        ...continueParams,
+      },
+      pageRevisionsResponseSchema,
+    );
+
+    for (const page of data.query.pages) {
+      revisions.set(page.pageid, page.lastrevid);
+    }
+
+    continueParams = data.continue;
+
+    logEvent("wiki_fetch_revisions_progress", { fetched: revisions.size });
+  } while (continueParams);
+
+  return revisions;
 };
 
 // Fetch the whole content-namespace corpus: every ns 0 page with its wikitext,
