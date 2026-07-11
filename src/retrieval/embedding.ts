@@ -1,9 +1,11 @@
 import {
+  env,
   pipeline,
   type FeatureExtractionPipeline,
 } from "@huggingface/transformers";
 import * as z from "zod";
 
+import { logEvent } from "@/log";
 import referenceEmbedding from "@/retrieval/embedding-reference.json";
 
 // The single place text becomes a vector. Ingestion (index-time) and search
@@ -24,6 +26,21 @@ export const EMBEDDING_DIMENSIONS = 384;
 
 const EMBEDDING_DTYPE = "fp32";
 
+// On Vercel the function filesystem is read-only except for /tmp, and the native
+// onnxruntime binary is excluded from the bundle to stay under the serverless
+// size cap. So on Vercel the query path runs the ONNX WASM backend and caches
+// the downloaded model under /tmp. Everywhere else (local dev, CI ingestion) the
+// backend is left to default to native onnxruntime, which is much faster for the
+// large ingestion batch. Pinning fp32 keeps the two backends' vectors in parity.
+const IS_SERVERLESS = Boolean(process.env.VERCEL);
+
+if (IS_SERVERLESS) {
+  env.cacheDir = "/tmp/transformers-cache";
+  env.allowLocalModels = false;
+}
+
+const EMBEDDING_DEVICE: "wasm" | undefined = IS_SERVERLESS ? "wasm" : undefined;
+
 // bge retrieval models expect this instruction prepended to queries only, not
 // to the documents being searched.
 const QUERY_INSTRUCTION =
@@ -37,8 +54,20 @@ let extractorPromise: Promise<FeatureExtractionPipeline> | null = null;
 
 const getExtractor = (): Promise<FeatureExtractionPipeline> => {
   if (!extractorPromise) {
+    const startedAt = performance.now();
+
+    // The first call loads (and on Vercel downloads) the model; this is the
+    // dominant serverless cold-start cost, so we log how long it took.
     extractorPromise = pipeline("feature-extraction", EMBEDDING_MODEL, {
       dtype: EMBEDDING_DTYPE,
+      device: EMBEDDING_DEVICE,
+    }).then((extractor) => {
+      logEvent("embedding_model_loaded", {
+        device: EMBEDDING_DEVICE ?? "auto",
+        loadMs: Math.round(performance.now() - startedAt),
+      });
+
+      return extractor;
     });
   }
 
