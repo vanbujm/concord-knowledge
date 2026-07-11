@@ -20,6 +20,14 @@ const nextConfig: NextConfig = {
       "node_modules/onnxruntime-node/bin/napi-v*/linux/arm64/**",
     ],
   },
+  // The native binding dlopens libonnxruntime.so.1 at runtime. The file tracer
+  // only sees the required .node binding, not that dlopen, so it never copies
+  // the shared library. Force the whole Linux x64 binary directory into the two
+  // routes that embed text, or the function loads the binding and then fails to
+  // open its shared object.
+  outputFileTracingIncludes: {
+    "/api/**": ["node_modules/onnxruntime-node/bin/napi-v*/linux/x64/**"],
+  },
 };
 
 export default nextConfig;
