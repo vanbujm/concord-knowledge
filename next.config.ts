@@ -6,15 +6,19 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: import.meta.dirname,
   },
-  // Transformers.js and its native ONNX runtime must load from node_modules at
-  // runtime, not be bundled into the serverless function (the native binding
-  // alone would blow the 250MB function size limit).
+  // Transformers.js and its native ONNX runtime load from node_modules at
+  // runtime rather than being bundled into the serverless function.
   serverExternalPackages: ["@huggingface/transformers", "onnxruntime-node"],
-  // The query path runs the ONNX WASM backend on Vercel, so the native
-  // onnxruntime-node binary is never loaded there. Dropping it from the traced
-  // function bundle is what keeps the serverless function under the 250MB cap.
+  // onnxruntime-node ships ~210MB of prebuilt binaries for every platform. The
+  // Vercel runtime is Linux x64, so dropping the macOS, Windows, and Linux
+  // arm64 binaries trims it to the ~26MB the function actually loads, keeping it
+  // under the 250MB serverless size cap.
   outputFileTracingExcludes: {
-    "*": ["node_modules/onnxruntime-node/**"],
+    "*": [
+      "node_modules/onnxruntime-node/bin/napi-v*/darwin/**",
+      "node_modules/onnxruntime-node/bin/napi-v*/win32/**",
+      "node_modules/onnxruntime-node/bin/napi-v*/linux/arm64/**",
+    ],
   },
 };
 

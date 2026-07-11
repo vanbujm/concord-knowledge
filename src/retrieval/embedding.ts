@@ -26,20 +26,19 @@ export const EMBEDDING_DIMENSIONS = 384;
 
 const EMBEDDING_DTYPE = "fp32";
 
-// On Vercel the function filesystem is read-only except for /tmp, and the native
-// onnxruntime binary is excluded from the bundle to stay under the serverless
-// size cap. So on Vercel the query path runs the ONNX WASM backend and caches
-// the downloaded model under /tmp. Everywhere else (local dev, CI ingestion) the
-// backend is left to default to native onnxruntime, which is much faster for the
-// large ingestion batch. Pinning fp32 keeps the two backends' vectors in parity.
+// On Vercel the function filesystem is read-only except for /tmp, so the model
+// (which Transformers.js downloads on first use) must be cached there rather
+// than in the read-only node_modules. The backend stays the native onnxruntime
+// everywhere: it is faster than WASM, and the WASM route is a trap here because
+// the Node build of Transformers.js hard-requires onnxruntime-node at load time
+// regardless of the chosen device. The bundle is kept under the serverless size
+// cap by dropping onnxruntime-node's non-Linux binaries in next.config.ts.
 const IS_SERVERLESS = Boolean(process.env.VERCEL);
 
 if (IS_SERVERLESS) {
   env.cacheDir = "/tmp/transformers-cache";
   env.allowLocalModels = false;
 }
-
-const EMBEDDING_DEVICE: "wasm" | undefined = IS_SERVERLESS ? "wasm" : undefined;
 
 // bge retrieval models expect this instruction prepended to queries only, not
 // to the documents being searched.
@@ -60,10 +59,8 @@ const getExtractor = (): Promise<FeatureExtractionPipeline> => {
     // dominant serverless cold-start cost, so we log how long it took.
     extractorPromise = pipeline("feature-extraction", EMBEDDING_MODEL, {
       dtype: EMBEDDING_DTYPE,
-      device: EMBEDDING_DEVICE,
     }).then((extractor) => {
       logEvent("embedding_model_loaded", {
-        device: EMBEDDING_DEVICE ?? "auto",
         loadMs: Math.round(performance.now() - startedAt),
       });
 
