@@ -47,8 +47,11 @@ __pycache__/
 
 # Kept local, never pushed to the public remote:
 # the scraped wiki corpus (regenerable via scripts/sync_wiki.py), the sync
-# tooling, and all top-level project markdown (CLAUDE.md, README, planning docs).
+# tooling, all top-level project markdown (CLAUDE.md, planning docs), and the
+# personal character-planning notes. The public README is the one exception.
 /wiki/
 /scripts/
 /*.md
+!/README.md
+/character-notes/
 /.agents/README.md
