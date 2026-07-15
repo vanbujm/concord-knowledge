@@ -6,71 +6,29 @@ import { Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { MultiSelect } from "@/components/ui/multi-select";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { FacetCount, Facets } from "@/retrieval/facets";
+import type { Facets } from "@/retrieval/facets";
 import type { SearchResult } from "@/retrieval/hybrid-search";
 
 import { ResultCard } from "./result-card";
 
-// The Select primitive cannot hold an empty value, so this signals the
-// "no filter on this facet" option; the API route omits it from the query.
-const ANY_VALUE = "any";
+type FacetKey = "realm" | "sphere" | "category" | "season";
 
-type FacetKey = "realm" | "sphere" | "pageType" | "season";
+// Each facet holds the list of values the user has ticked; an empty list means
+// no filter on that facet. The query param key matches the FacetKey.
+type Filters = Record<FacetKey, string[]>;
 
-type Filters = Record<FacetKey, string>;
+const FACET_KEYS: FacetKey[] = ["realm", "sphere", "category", "season"];
 
 const EMPTY_FILTERS: Filters = {
-  realm: ANY_VALUE,
-  sphere: ANY_VALUE,
-  pageType: ANY_VALUE,
-  season: ANY_VALUE,
+  realm: [],
+  sphere: [],
+  category: [],
+  season: [],
 };
 
 type SearchStatus = "idle" | "loading" | "error";
-
-const FacetSelect = ({
-  label,
-  allLabel,
-  options,
-  value,
-  onChange,
-}: {
-  label: string;
-  allLabel: string;
-  options: FacetCount[];
-  value: string;
-  onChange: (next: string) => void;
-}) => {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <Label className="text-xs text-muted-foreground">{label}</Label>
-
-      <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className="w-full">
-          <SelectValue />
-        </SelectTrigger>
-
-        <SelectContent>
-          <SelectItem value={ANY_VALUE}>{allLabel}</SelectItem>
-
-          {options.map((option) => (
-            <SelectItem key={option.value} value={option.value}>
-              {option.value} ({option.count})
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
-  );
-};
 
 export const SearchForm = ({ facets }: { facets: Facets }) => {
   const [query, setQuery] = useState("");
@@ -94,11 +52,9 @@ export const SearchForm = ({ facets }: { facets: Facets }) => {
 
       const params = new URLSearchParams({ q: trimmed });
 
-      for (const key of ["realm", "sphere", "pageType", "season"] as const) {
-        const value = searchFilters[key];
-
-        if (value !== ANY_VALUE) {
-          params.set(key, value);
+      for (const key of FACET_KEYS) {
+        for (const value of searchFilters[key]) {
+          params.append(key, value);
         }
       }
 
@@ -136,8 +92,8 @@ export const SearchForm = ({ facets }: { facets: Facets }) => {
     runSearch(query, filters);
   };
 
-  const updateFilter = (key: FacetKey, value: string) => {
-    const next = { ...filters, [key]: value };
+  const updateFilter = (key: FacetKey, values: string[]) => {
+    const next = { ...filters, [key]: values };
 
     setFilters(next);
 
@@ -165,37 +121,49 @@ export const SearchForm = ({ facets }: { facets: Facets }) => {
         </div>
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <FacetSelect
-            label="Realm"
-            allLabel="All realms"
-            options={facets.realms}
-            value={filters.realm}
-            onChange={(value) => updateFilter("realm", value)}
-          />
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-xs text-muted-foreground">Realm</Label>
+            <MultiSelect
+              label="Realm"
+              allLabel="All realms"
+              options={facets.realms}
+              selected={filters.realm}
+              onChange={(values) => updateFilter("realm", values)}
+            />
+          </div>
 
-          <FacetSelect
-            label="Sphere"
-            allLabel="All spheres"
-            options={facets.spheres}
-            value={filters.sphere}
-            onChange={(value) => updateFilter("sphere", value)}
-          />
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-xs text-muted-foreground">Sphere</Label>
+            <MultiSelect
+              label="Sphere"
+              allLabel="All spheres"
+              options={facets.spheres}
+              selected={filters.sphere}
+              onChange={(values) => updateFilter("sphere", values)}
+            />
+          </div>
 
-          <FacetSelect
-            label="Page type"
-            allLabel="All types"
-            options={facets.pageTypes}
-            value={filters.pageType}
-            onChange={(value) => updateFilter("pageType", value)}
-          />
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-xs text-muted-foreground">Category</Label>
+            <MultiSelect
+              label="Category"
+              allLabel="All categories"
+              options={facets.categories}
+              selected={filters.category}
+              onChange={(values) => updateFilter("category", values)}
+            />
+          </div>
 
-          <FacetSelect
-            label="Season"
-            allLabel="All seasons"
-            options={facets.seasons}
-            value={filters.season}
-            onChange={(value) => updateFilter("season", value)}
-          />
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-xs text-muted-foreground">Season</Label>
+            <MultiSelect
+              label="Season"
+              allLabel="All seasons"
+              options={facets.seasons}
+              selected={filters.season}
+              onChange={(values) => updateFilter("season", values)}
+            />
+          </div>
         </div>
       </form>
 

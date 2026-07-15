@@ -3,11 +3,11 @@ import { listFacets } from "@/retrieval/facets";
 import { SearchForm } from "./search-form";
 
 // Regenerate the cached page at most once an hour so facets from a fresh
-// ingestion (new seasons, page types) show up without a redeploy. 3600 is in
+// ingestion (new seasons, categories) show up without a redeploy. 3600 is in
 // seconds, the unit Next.js expects for revalidate.
 export const revalidate = 3600;
 
-// The server shell: it loads the facet values (realms, spheres, page types,
+// The server shell: it loads the facet values (realms, spheres, categories,
 // seasons with their counts) on the server and hands them to the client search
 // island, which owns the query box, the filters, and fetching /api/search.
 const Home = async () => {

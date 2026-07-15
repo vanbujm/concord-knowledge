@@ -70,9 +70,15 @@ export const ResultCard = ({ result }: { result: SearchResult }) => {
         <div className="flex items-start justify-between gap-3">
           <CardTitle className="text-base">{result.title}</CardTitle>
 
-          <Badge variant="secondary" className="shrink-0 capitalize">
-            {result.pageType}
-          </Badge>
+          {result.categories.length > 0 ? (
+            <div className="flex shrink-0 flex-wrap justify-end gap-1">
+              {result.categories.map((category) => (
+                <Badge key={category} variant="secondary">
+                  {category}
+                </Badge>
+              ))}
+            </div>
+          ) : null}
         </div>
 
         {breadcrumb.length > 0 ? (

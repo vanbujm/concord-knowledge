@@ -12,7 +12,7 @@ const baseResult: SearchResult = {
   excerpt: "The Iron Valley stood together against the siege.",
   highlights: [{ start: 4, end: 9 }],
   sourceUrl: "https://wiki.concordlarp.com/The_Iron_Valley",
-  pageType: "lore",
+  categories: ["Realms of the Concord"],
   realm: "The Iron Valley",
   sphere: null,
   seasons: ["Winter 226"],
@@ -20,11 +20,11 @@ const baseResult: SearchResult = {
 };
 
 describe("ResultCard", () => {
-  it("shows the title, page type, and section breadcrumb", () => {
+  it("shows the title, categories, and section breadcrumb", () => {
     render(<ResultCard result={baseResult} />);
 
     expect(screen.getByText("The Iron Valley")).toBeInTheDocument();
-    expect(screen.getByText("lore")).toBeInTheDocument();
+    expect(screen.getByText("Realms of the Concord")).toBeInTheDocument();
     expect(screen.getByText("History")).toBeInTheDocument();
     expect(screen.getByText("The Siege")).toBeInTheDocument();
   });
