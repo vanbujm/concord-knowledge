@@ -2,6 +2,7 @@ import * as z from "zod";
 
 import { MAX_RESULT_LIMIT } from "@/config/display";
 import { checkRateLimit, clientIdentifier } from "@/rate-limit";
+import { warmEmbeddingModel } from "@/retrieval/embedding";
 import { runHybridSearch } from "@/retrieval/hybrid-search";
 
 // The web UI's search endpoint. It is the browser-facing sibling of the MCP
@@ -37,6 +38,19 @@ const multiValue = (
 };
 
 export const GET = async (request: Request): Promise<Response> => {
+  const params = new URL(request.url).searchParams;
+
+  // A pre-warm ping (the homepage fires one on load) loads the embedding model
+  // on this instance so the user's first real search hits a warm one. We await
+  // the load so the serverless instance stays alive until it finishes, and we
+  // answer before the rate limit and any DB work: warming is not a query and
+  // must not spend the caller's per-IP search budget.
+  if (params.get("warm")) {
+    await warmEmbeddingModel();
+
+    return Response.json({ warmed: true });
+  }
+
   const allowed = await checkRateLimit(clientIdentifier(request));
 
   if (!allowed) {
@@ -45,8 +59,6 @@ export const GET = async (request: Request): Promise<Response> => {
       { status: 429 },
     );
   }
-
-  const params = new URL(request.url).searchParams;
 
   const parsed = querySchema.safeParse({
     q: params.get("q") ?? "",

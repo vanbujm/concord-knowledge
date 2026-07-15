@@ -75,6 +75,13 @@ const getExtractor = (): Promise<FeatureExtractionPipeline> => {
   return extractorPromise;
 };
 
+// Force the model to load (and on Vercel download) without running a query. A
+// pre-warm request calls this so the cold-start cost is paid while the user is
+// still reading the page and typing, rather than blocking their first search.
+export const warmEmbeddingModel = async (): Promise<void> => {
+  await getExtractor();
+};
+
 const applyInstruction = (text: string, kind: EmbedKind): string =>
   kind === "query" ? `${QUERY_INSTRUCTION}${text}` : text;
 
