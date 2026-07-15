@@ -88,6 +88,15 @@ const deriveSeasons = (title: string, wikitext: string): string[] => {
   });
 };
 
+// True when a wiki category on its own already feeds the realm or sphere facet:
+// the sphere categories ("Panoply", "Stallia", ...) and the realm categories
+// ("Andash", "Greenweald", the smushed "LeronaMere", ...). The category filter
+// drops these so it does not simply repeat what the realm and sphere filters
+// already offer. Sharing the derivation keeps this in step with how those two
+// facets are inferred.
+export const categoryFeedsRealmOrSphere = (category: string): boolean =>
+  deriveRealm("", [category]) !== null || deriveSphere("", [category]) !== null;
+
 export const deriveFacets = (input: FacetInput): PageFacets => ({
   realm: deriveRealm(input.title, input.categories),
   sphere: deriveSphere(input.title, input.categories),

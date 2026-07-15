@@ -1,4 +1,5 @@
 import { prisma } from "@/db/client";
+import { categoryFeedsRealmOrSphere } from "@/ingest/derive-facets";
 
 // The filterable facet values with document counts, for the web UI's filter
 // panel and the MCP list_facets tool.
@@ -78,14 +79,17 @@ export const listFacets = async (): Promise<Facets> => {
     }
   }
 
+  // Drop categories the realm and sphere filters already cover, so the category
+  // filter is not cluttered with e.g. "Panoply" (a sphere) or "Andash" (a realm).
   const categories: FacetCount[] = categoryRows
     .map((row) => ({ value: row.value, count: Number(row.count) }))
+    .filter((category) => !categoryFeedsRealmOrSphere(category.value))
     .sort(byCountDescending);
 
-  // Pin the uncategorised bucket to the end so the real wiki categories lead the
-  // list; its count is often the largest and would otherwise dominate the top.
+  // Uncategorised is a special bucket (pages with no category), not a real wiki
+  // category, so pin it to the top of the list rather than sorting it by count.
   if (uncategorizedCount > 0) {
-    categories.push({ value: UNCATEGORIZED_VALUE, count: uncategorizedCount });
+    categories.unshift({ value: UNCATEGORIZED_VALUE, count: uncategorizedCount });
   }
 
   const seasons: FacetCount[] = seasonRows.map((row) => ({
