@@ -20,8 +20,14 @@ export type Facets = {
 
 const SEASON_ORDER = ["Spring", "Summer", "Autumn", "Winter"];
 
+// Plain alphabetical, used for the short realm and sphere lists where a
+// count ordering earns nothing over just scanning the handful of names.
+const byAlpha = (first: FacetCount, second: FacetCount): number =>
+  first.value.localeCompare(second.value);
+
 // Most documents first; ties broken alphabetically so equal-count values sit in
 // a stable, scannable order rather than whatever order the database returned.
+// Used for the long category list, where leading with the biggest buckets helps.
 const byCountThenAlpha = (first: FacetCount, second: FacetCount): number => {
   if (second.count !== first.count) {
     return second.count - first.count;
@@ -105,8 +111,8 @@ export const listFacets = async (): Promise<Facets> => {
   }));
 
   return {
-    realms: realms.sort(byCountThenAlpha),
-    spheres: spheres.sort(byCountThenAlpha),
+    realms: realms.sort(byAlpha),
+    spheres: spheres.sort(byAlpha),
     categories,
     seasons: seasons.sort(byRecency),
   };
