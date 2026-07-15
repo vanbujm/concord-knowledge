@@ -20,13 +20,35 @@ const baseResult: SearchResult = {
 };
 
 describe("ResultCard", () => {
-  it("shows the title, categories, and section breadcrumb", () => {
+  it("shows the title, tags, and section breadcrumb", () => {
     render(<ResultCard result={baseResult} />);
 
-    expect(screen.getByText("The Iron Valley")).toBeInTheDocument();
+    // The title also appears as the realm tag here, so match by count.
+    expect(screen.getAllByText("The Iron Valley").length).toBeGreaterThan(0);
     expect(screen.getByText("Realms of the Concord")).toBeInTheDocument();
+    expect(screen.getByText("Winter 226")).toBeInTheDocument();
     expect(screen.getByText("History")).toBeInTheDocument();
     expect(screen.getByText("The Siege")).toBeInTheDocument();
+  });
+
+  it("renders realm, sphere, category, and season tags", () => {
+    render(
+      <ResultCard
+        result={{
+          ...baseResult,
+          title: "Panoply Ceremonies",
+          realm: "Andash",
+          sphere: "Panoply",
+          categories: ["Ceremonies"],
+          seasons: ["Autumn 226"],
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Andash")).toBeInTheDocument();
+    expect(screen.getByText("Panoply")).toBeInTheDocument();
+    expect(screen.getByText("Ceremonies")).toBeInTheDocument();
+    expect(screen.getByText("Autumn 226")).toBeInTheDocument();
   });
 
   it("wraps the matched term in a mark element", () => {

@@ -64,22 +64,19 @@ export const ResultCard = ({ result }: { result: SearchResult }) => {
     ? result.headingPath.split(" > ")
     : [];
 
+  // The facet tags a result carries, so a card is self-describing and shows why
+  // it matched a filter. The explicit wiki categories are filled; the derived
+  // facets (realm, sphere, season) are outlined, with seasons muted as context.
+  const hasTags =
+    result.realm !== null ||
+    result.sphere !== null ||
+    result.categories.length > 0 ||
+    result.seasons.length > 0;
+
   return (
     <Card className="gap-3">
       <CardHeader>
-        <div className="flex items-start justify-between gap-3">
-          <CardTitle className="text-base">{result.title}</CardTitle>
-
-          {result.categories.length > 0 ? (
-            <div className="flex shrink-0 flex-wrap justify-end gap-1">
-              {result.categories.map((category) => (
-                <Badge key={category} variant="secondary">
-                  {category}
-                </Badge>
-              ))}
-            </div>
-          ) : null}
-        </div>
+        <CardTitle className="text-base">{result.title}</CardTitle>
 
         {breadcrumb.length > 0 ? (
           <nav
@@ -93,6 +90,34 @@ export const ResultCard = ({ result }: { result: SearchResult }) => {
               </Fragment>
             ))}
           </nav>
+        ) : null}
+
+        {hasTags ? (
+          <div className="flex flex-wrap gap-1 pt-1">
+            {result.realm !== null ? (
+              <Badge variant="outline">{result.realm}</Badge>
+            ) : null}
+
+            {result.sphere !== null ? (
+              <Badge variant="outline">{result.sphere}</Badge>
+            ) : null}
+
+            {result.categories.map((category) => (
+              <Badge key={category} variant="secondary">
+                {category}
+              </Badge>
+            ))}
+
+            {result.seasons.map((season) => (
+              <Badge
+                key={season}
+                variant="outline"
+                className="text-muted-foreground"
+              >
+                {season}
+              </Badge>
+            ))}
+          </div>
         ) : null}
       </CardHeader>
 
