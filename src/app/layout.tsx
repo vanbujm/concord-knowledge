@@ -1,5 +1,5 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Geist } from "next/font/google";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -7,15 +7,26 @@ const geistSans = Geist({
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+const TITLE = "Concord Wiki Search";
+const DESCRIPTION =
+  "Fast, cited search across the Concord LARP wiki, via web and MCP.";
 
 export const metadata: Metadata = {
-  title: "Concord Wiki Search",
-  description:
-    "Fast, cited search across the Concord LARP wiki, via web and MCP.",
+  metadataBase: new URL("https://concord-knowledge.vercel.app"),
+  title: TITLE,
+  description: DESCRIPTION,
+  openGraph: {
+    title: TITLE,
+    description: DESCRIPTION,
+    type: "website",
+  },
+};
+
+// The UI is dark-only (see the forced `dark` class on <html>), so tell the
+// browser to render form controls and scrollbars dark and match the chrome.
+export const viewport: Viewport = {
+  colorScheme: "dark",
+  themeColor: "#0a0a0a",
 };
 
 const RootLayout = ({
@@ -24,7 +35,7 @@ const RootLayout = ({
   return (
     <html
       lang="en"
-      className={`dark ${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`dark ${geistSans.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
