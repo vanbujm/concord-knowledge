@@ -30,30 +30,6 @@ describe("deriveFacets", () => {
     ).toBe("Stallia");
   });
 
-  it("classifies page types by naming convention", () => {
-    const typeOf = (title: string, categories: string[] = [], wikitext = "") =>
-      deriveFacets({ title, categories, wikitext }).pageType;
-
-    expect(typeOf("Winds of the World - Summer 223")).toBe("newsletter");
-    expect(typeOf("Historic Research - Winter 224")).toBe("history");
-    expect(typeOf("Ash and Fire - The War in Windholme")).toBe("war-report");
-    expect(typeOf("Iron Valley Tales of the People")).toBe("fiction");
-    expect(typeOf("Combat Skills", ["Skills"])).toBe("rules");
-    // Rules recognised by title even when the page has no categories.
-    expect(typeOf("Magic Skills")).toBe("rules");
-    expect(typeOf("The Iron Valley", [], "Communal mountainfolk.")).toBe("lore");
-  });
-
-  it("classifies blockquote-wrapped pages as fiction", () => {
-    expect(
-      deriveFacets({
-        title: "A Poetic Story",
-        categories: [],
-        wikitext: "<blockquote>Once upon a time in Esterra.</blockquote>",
-      }).pageType,
-    ).toBe("fiction");
-  });
-
   it("extracts, dedupes, and sorts seasons chronologically", () => {
     const facets = deriveFacets({
       title: "Winds of the World - Autumn 226",

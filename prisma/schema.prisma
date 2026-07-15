@@ -9,9 +9,10 @@ datasource db {
   extensions = [vector]
 }
 
-/// One wiki page. Attribution (title, sourceUrl, pageId) plus the derived
-/// facets used for filtering, and the fields that drive incremental sync
-/// (lastRevId + contentHash). Full text lives in the child chunks.
+/// One wiki page. Attribution (title, sourceUrl, pageId) plus the facets used
+/// for filtering (the wiki's own categories, plus the derived realm, sphere,
+/// and seasons), and the fields that drive incremental sync (lastRevId +
+/// contentHash). Full text lives in the child chunks.
 model Document {
   id          String   @id @default(cuid())
   pageId      Int      @unique
@@ -22,7 +23,6 @@ model Document {
   categories  String[]
   realm       String?
   sphere      String?
-  pageType    String
   seasons     String[]
   fetchedAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -30,7 +30,6 @@ model Document {
 
   @@index([realm])
   @@index([sphere])
-  @@index([pageType])
 }
 
 /// A retrieval unit: one section-aware slice of a Document. `embedding` and

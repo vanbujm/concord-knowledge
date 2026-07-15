@@ -77,7 +77,6 @@ const reindexPage = async (page: WikiPage): Promise<number> => {
     categories: page.categories,
     realm: facets.realm,
     sphere: facets.sphere,
-    pageType: facets.pageType,
     seasons: facets.seasons,
   };
 

@@ -19,7 +19,6 @@ const seed = async () => {
       contentHash: "seed-iron-valley",
       categories: ["Realms of the Concord"],
       realm: "The Iron Valley",
-      pageType: "lore",
       seasons: [],
       chunks: {
         create: [
