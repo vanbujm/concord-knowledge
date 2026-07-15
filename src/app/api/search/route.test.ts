@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { checkRateLimit } from "@/rate-limit";
+import { warmEmbeddingModel } from "@/retrieval/embedding";
 import { runHybridSearch, type SearchResult } from "@/retrieval/hybrid-search";
 import { GET } from "@/app/api/search/route";
 
@@ -9,11 +10,16 @@ vi.mock("@/rate-limit", () => ({
   clientIdentifier: vi.fn(() => "test-ip"),
 }));
 
+vi.mock("@/retrieval/embedding", () => ({
+  warmEmbeddingModel: vi.fn(),
+}));
+
 vi.mock("@/retrieval/hybrid-search", () => ({
   runHybridSearch: vi.fn(),
 }));
 
 const mockedCheckRateLimit = vi.mocked(checkRateLimit);
+const mockedWarmEmbeddingModel = vi.mocked(warmEmbeddingModel);
 const mockedRunHybridSearch = vi.mocked(runHybridSearch);
 
 const sampleResult: SearchResult = {
@@ -37,7 +43,19 @@ describe("GET /api/search", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockedCheckRateLimit.mockResolvedValue(true);
+    mockedWarmEmbeddingModel.mockResolvedValue();
     mockedRunHybridSearch.mockResolvedValue([]);
+  });
+
+  it("warms the model without searching, rate-limiting, or needing a query", async () => {
+    const response = await GET(request("?warm=1"));
+    const body: { warmed: boolean } = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual({ warmed: true });
+    expect(mockedWarmEmbeddingModel).toHaveBeenCalledTimes(1);
+    expect(mockedCheckRateLimit).not.toHaveBeenCalled();
+    expect(mockedRunHybridSearch).not.toHaveBeenCalled();
   });
 
   it("rejects a missing query with 400 and never searches", async () => {
