@@ -25,23 +25,25 @@ const mcpHandler = createMcpHandler(
         inputSchema: {
           query: z.string().min(1).describe("What to search for."),
           realm: z
-            .string()
-            .optional()
-            .describe("Filter to a realm, e.g. 'The Iron Valley'."),
-          sphere: z
-            .string()
-            .optional()
-            .describe("Filter to a sphere, e.g. 'Panoply'."),
-          pageType: z
-            .string()
+            .array(z.string())
             .optional()
             .describe(
-              "Filter to a page type: rules, lore, newsletter, history, war-report, fiction.",
+              "Filter to one or more realms, e.g. ['The Iron Valley']. Values within a facet are OR'd.",
+            ),
+          sphere: z
+            .array(z.string())
+            .optional()
+            .describe("Filter to one or more spheres, e.g. ['Panoply']."),
+          category: z
+            .array(z.string())
+            .optional()
+            .describe(
+              "Filter to one or more wiki categories, e.g. ['Ceremonies']. Use 'Uncategorised' for pages with no category.",
             ),
           season: z
-            .string()
+            .array(z.string())
             .optional()
-            .describe("Filter to a season, e.g. 'Winter 226'."),
+            .describe("Filter to one or more seasons, e.g. ['Winter 226']."),
           limit: z
             .number()
             .int()
@@ -51,10 +53,15 @@ const mcpHandler = createMcpHandler(
             .describe("Maximum results (default 10)."),
         },
       },
-      async ({ query, realm, sphere, pageType, season, limit }) => {
+      async ({ query, realm, sphere, category, season, limit }) => {
         const results = await runHybridSearch({
           query,
-          filters: { realm, sphere, pageType, season },
+          filters: {
+            realms: realm,
+            spheres: sphere,
+            categories: category,
+            seasons: season,
+          },
           limit,
         });
 
@@ -63,7 +70,7 @@ const mcpHandler = createMcpHandler(
           section: result.headingPath || null,
           excerpt: result.excerpt,
           sourceUrl: result.sourceUrl,
-          pageType: result.pageType,
+          categories: result.categories,
           realm: result.realm,
           sphere: result.sphere,
           seasons: result.seasons,
@@ -106,7 +113,7 @@ const mcpHandler = createMcpHandler(
       {
         title: "List Concord wiki facets",
         description:
-          "List the filter values (realms, spheres, page types, seasons) with document counts, for use with search_wiki filters.",
+          "List the filter values (realms, spheres, categories, seasons) with document counts, for use with search_wiki filters. The categories facet includes an 'Uncategorised' bucket for pages with no wiki category.",
         inputSchema: {},
       },
       async () => {

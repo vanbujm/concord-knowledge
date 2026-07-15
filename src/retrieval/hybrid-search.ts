@@ -11,6 +11,7 @@ import {
   queryTerms,
   type HighlightRange,
 } from "@/retrieval/excerpt";
+import { UNCATEGORIZED_VALUE } from "@/retrieval/facets";
 
 // The shared retrieval core, imported by both the web route and the MCP server.
 // It fuses a semantic (pgvector) ranking with a keyword (Postgres full-text)
@@ -24,11 +25,14 @@ const RRF_K = 60;
 // How many candidates each ranker contributes before fusion.
 const CANDIDATE_POOL_SIZE = 50;
 
+// Each facet holds zero or more selected values. Within a facet the values are
+// OR'd (a document matches if it has any of them); across facets they are AND'd.
+// An empty or absent array means "no filter on this facet".
 export type SearchFilters = {
-  realm?: string;
-  sphere?: string;
-  pageType?: string;
-  season?: string;
+  realms?: string[];
+  spheres?: string[];
+  categories?: string[];
+  seasons?: string[];
 };
 
 export type SearchResult = {
@@ -38,7 +42,7 @@ export type SearchResult = {
   excerpt: string;
   highlights: HighlightRange[];
   sourceUrl: string;
-  pageType: string;
+  categories: string[];
   realm: string | null;
   sphere: string | null;
   seasons: string[];
@@ -64,10 +68,18 @@ export const runHybridSearch = async (input: {
   const startedAt = performance.now();
 
   const resultLimit = clampLimit(limit);
-  const realm = filters.realm ?? null;
-  const sphere = filters.sphere ?? null;
-  const pageType = filters.pageType ?? null;
-  const season = filters.season ?? null;
+  const realms = filters.realms ?? [];
+  const spheres = filters.spheres ?? [];
+  const seasons = filters.seasons ?? [];
+
+  // "Uncategorised" is a signal value, not a real category: it selects pages
+  // with an empty category array, so it is handled by a separate SQL branch and
+  // stripped from the list of real categories matched against the column.
+  const categoryFilter = filters.categories ?? [];
+  const includeUncategorized = categoryFilter.includes(UNCATEGORIZED_VALUE);
+  const realCategories = categoryFilter.filter(
+    (category) => category !== UNCATEGORIZED_VALUE,
+  );
 
   const queryVector = await embedText(query, "query");
   const vectorLiteral = JSON.stringify(queryVector);
@@ -78,10 +90,16 @@ export const runHybridSearch = async (input: {
       SELECT c.id, c.embedding, c."searchVector"
       FROM "Chunk" c
       JOIN "Document" d ON d.id = c."documentId"
-      WHERE (${realm}::text IS NULL OR d.realm = ${realm})
-        AND (${sphere}::text IS NULL OR d.sphere = ${sphere})
-        AND (${pageType}::text IS NULL OR d."pageType" = ${pageType})
-        AND (${season}::text IS NULL OR ${season} = ANY(d.seasons))
+      -- Each facet: an empty selection array means no filter; otherwise the
+      -- document must match one of the selected values. && is array overlap.
+      WHERE (cardinality(${realms}::text[]) = 0 OR d.realm = ANY(${realms}::text[]))
+        AND (cardinality(${spheres}::text[]) = 0 OR d.sphere = ANY(${spheres}::text[]))
+        AND (cardinality(${seasons}::text[]) = 0 OR d.seasons && ${seasons}::text[])
+        AND (
+          (cardinality(${realCategories}::text[]) = 0 AND ${includeUncategorized} = false)
+          OR d.categories && ${realCategories}::text[]
+          OR (${includeUncategorized} = true AND cardinality(d.categories) = 0)
+        )
     ),
     vec AS (
       SELECT id, ROW_NUMBER() OVER (ORDER BY embedding <=> ${vectorLiteral}::vector) AS rank
@@ -121,7 +139,7 @@ export const runHybridSearch = async (input: {
         select: {
           title: true,
           sourceUrl: true,
-          pageType: true,
+          categories: true,
           realm: true,
           sphere: true,
           seasons: true,
@@ -155,7 +173,7 @@ export const runHybridSearch = async (input: {
       excerpt: excerpt.text,
       highlights: excerpt.highlights,
       sourceUrl: chunk.document.sourceUrl,
-      pageType: chunk.document.pageType,
+      categories: chunk.document.categories,
       realm: chunk.document.realm,
       sphere: chunk.document.sphere,
       seasons: chunk.document.seasons,

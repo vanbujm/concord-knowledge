@@ -12,10 +12,10 @@ import { runHybridSearch } from "@/retrieval/hybrid-search";
 
 const querySchema = z.object({
   q: z.string().min(1, "A search query is required."),
-  realm: z.string().optional(),
-  sphere: z.string().optional(),
-  pageType: z.string().optional(),
-  season: z.string().optional(),
+  realm: z.array(z.string()).optional(),
+  sphere: z.array(z.string()).optional(),
+  category: z.array(z.string()).optional(),
+  season: z.array(z.string()).optional(),
   limit: z.coerce.number().int().min(1).max(MAX_RESULT_LIMIT).optional(),
 });
 
@@ -23,6 +23,18 @@ const querySchema = z.object({
 // never reaches the schema as a real (and unmatchable) value.
 const blankToUndefined = (value: string | null): string | undefined =>
   value ? value : undefined;
+
+// Facets are repeatable query params (e.g. ?category=Ceremonies&category=Rules).
+// Drop blank entries and collapse an empty selection to undefined so it reads as
+// "no filter on this facet".
+const multiValue = (
+  params: URLSearchParams,
+  key: string,
+): string[] | undefined => {
+  const values = params.getAll(key).filter(Boolean);
+
+  return values.length > 0 ? values : undefined;
+};
 
 export const GET = async (request: Request): Promise<Response> => {
   const allowed = await checkRateLimit(clientIdentifier(request));
@@ -38,10 +50,10 @@ export const GET = async (request: Request): Promise<Response> => {
 
   const parsed = querySchema.safeParse({
     q: params.get("q") ?? "",
-    realm: blankToUndefined(params.get("realm")),
-    sphere: blankToUndefined(params.get("sphere")),
-    pageType: blankToUndefined(params.get("pageType")),
-    season: blankToUndefined(params.get("season")),
+    realm: multiValue(params, "realm"),
+    sphere: multiValue(params, "sphere"),
+    category: multiValue(params, "category"),
+    season: multiValue(params, "season"),
     limit: blankToUndefined(params.get("limit")),
   });
 
@@ -51,11 +63,16 @@ export const GET = async (request: Request): Promise<Response> => {
     return Response.json({ error: message }, { status: 400 });
   }
 
-  const { q, realm, sphere, pageType, season, limit } = parsed.data;
+  const { q, realm, sphere, category, season, limit } = parsed.data;
 
   const results = await runHybridSearch({
     query: q,
-    filters: { realm, sphere, pageType, season },
+    filters: {
+      realms: realm,
+      spheres: sphere,
+      categories: category,
+      seasons: season,
+    },
     limit,
   });
 

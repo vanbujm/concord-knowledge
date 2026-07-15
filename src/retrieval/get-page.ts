@@ -12,7 +12,7 @@ const MAX_SECTIONS = 12;
 export type WikiPageView = {
   title: string;
   sourceUrl: string;
-  pageType: string;
+  categories: string[];
   realm: string | null;
   sphere: string | null;
   seasons: string[];
@@ -28,7 +28,7 @@ export const getPageByTitle = async (
     select: {
       title: true,
       sourceUrl: true,
-      pageType: true,
+      categories: true,
       realm: true,
       sphere: true,
       seasons: true,
@@ -55,7 +55,7 @@ export const getPageByTitle = async (
   return {
     title: document.title,
     sourceUrl: document.sourceUrl,
-    pageType: document.pageType,
+    categories: document.categories,
     realm: document.realm,
     sphere: document.sphere,
     seasons: document.seasons,

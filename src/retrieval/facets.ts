@@ -3,12 +3,17 @@ import { prisma } from "@/db/client";
 // The filterable facet values with document counts, for the web UI's filter
 // panel and the MCP list_facets tool.
 
+// The category facet value that selects pages carrying no wiki category at all.
+// It is not a real wiki category (none is named this), so it can double as both
+// the display label and the filter value the retrieval core recognises.
+export const UNCATEGORIZED_VALUE = "Uncategorised";
+
 export type FacetCount = { value: string; count: number };
 
 export type Facets = {
   realms: FacetCount[];
   spheres: FacetCount[];
-  pageTypes: FacetCount[];
+  categories: FacetCount[];
   seasons: FacetCount[];
 };
 
@@ -31,7 +36,7 @@ const byRecency = (first: FacetCount, second: FacetCount): number => {
 };
 
 export const listFacets = async (): Promise<Facets> => {
-  const [realmGroups, sphereGroups, pageTypeGroups, seasonRows] =
+  const [realmGroups, sphereGroups, categoryRows, uncategorizedCount, seasonRows] =
     await Promise.all([
       prisma.document.groupBy({
         by: ["realm"],
@@ -43,7 +48,15 @@ export const listFacets = async (): Promise<Facets> => {
         _count: { _all: true },
         where: { sphere: { not: null } },
       }),
-      prisma.document.groupBy({ by: ["pageType"], _count: { _all: true } }),
+      // unnest expands each document's category array into one row per category,
+      // so a page tagged with several categories counts towards each. Pages with
+      // no categories contribute nothing here; they are counted separately below.
+      prisma.$queryRaw<Array<{ value: string; count: bigint }>>`
+        SELECT unnest(categories) AS value, count(*) AS count
+        FROM "Document"
+        GROUP BY value
+      `,
+      prisma.document.count({ where: { categories: { isEmpty: true } } }),
       prisma.$queryRaw<Array<{ value: string; count: bigint }>>`
         SELECT unnest(seasons) AS value, count(*) AS count
         FROM "Document"
@@ -65,10 +78,15 @@ export const listFacets = async (): Promise<Facets> => {
     }
   }
 
-  const pageTypes: FacetCount[] = pageTypeGroups.map((group) => ({
-    value: group.pageType,
-    count: group._count._all,
-  }));
+  const categories: FacetCount[] = categoryRows
+    .map((row) => ({ value: row.value, count: Number(row.count) }))
+    .sort(byCountDescending);
+
+  // Pin the uncategorised bucket to the end so the real wiki categories lead the
+  // list; its count is often the largest and would otherwise dominate the top.
+  if (uncategorizedCount > 0) {
+    categories.push({ value: UNCATEGORIZED_VALUE, count: uncategorizedCount });
+  }
 
   const seasons: FacetCount[] = seasonRows.map((row) => ({
     value: row.value,
@@ -78,7 +96,7 @@ export const listFacets = async (): Promise<Facets> => {
   return {
     realms: realms.sort(byCountDescending),
     spheres: spheres.sort(byCountDescending),
-    pageTypes: pageTypes.sort(byCountDescending),
+    categories,
     seasons: seasons.sort(byRecency),
   };
 };

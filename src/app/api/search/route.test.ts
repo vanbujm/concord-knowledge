@@ -23,7 +23,7 @@ const sampleResult: SearchResult = {
   excerpt: "The Iron Valley stood together against the siege.",
   highlights: [{ start: 4, end: 9 }],
   sourceUrl: "https://wiki.concordlarp.com/The_Iron_Valley",
-  pageType: "lore",
+  categories: ["Realms of the Concord"],
   realm: "The Iron Valley",
   sphere: null,
   seasons: ["Winter 226"],
@@ -73,13 +73,25 @@ describe("GET /api/search", () => {
     expect(mockedRunHybridSearch).toHaveBeenCalledWith({
       query: "iron",
       filters: {
-        realm: "Andash",
-        sphere: undefined,
-        pageType: undefined,
-        season: "Winter 226",
+        realms: ["Andash"],
+        spheres: undefined,
+        categories: undefined,
+        seasons: ["Winter 226"],
       },
       limit: undefined,
     });
+  });
+
+  it("collects repeated facet params into one selection per facet", async () => {
+    await GET(request("?q=iron&category=Ceremonies&category=Uncategorised"));
+
+    expect(mockedRunHybridSearch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filters: expect.objectContaining({
+          categories: ["Ceremonies", "Uncategorised"],
+        }),
+      }),
+    );
   });
 
   it("treats a blank facet value as no filter", async () => {
@@ -87,7 +99,7 @@ describe("GET /api/search", () => {
 
     expect(mockedRunHybridSearch).toHaveBeenCalledWith(
       expect.objectContaining({
-        filters: expect.objectContaining({ realm: undefined }),
+        filters: expect.objectContaining({ realms: undefined }),
       }),
     );
   });
