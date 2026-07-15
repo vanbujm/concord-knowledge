@@ -24,15 +24,11 @@ const nextConfig: NextConfig = {
       "node_modules/onnxruntime-node/bin/napi-v*/darwin/**",
       "node_modules/onnxruntime-node/bin/napi-v*/win32/**",
       "node_modules/onnxruntime-node/bin/napi-v*/linux/arm64/**",
-      // sharp is a transitive dependency (of Transformers.js and Next's image
-      // optimizer) that ships large per-platform libvips binaries. This app
-      // uses no next/image and does no image processing, so it is dead weight
-      // in the function.
-      "node_modules/sharp/**",
-      // Transformers.js pulls both the Node and WASM ONNX runtimes; these
-      // routes run under the Node runtime and use onnxruntime-node, so the WASM
-      // build and its dependencies never load. Excluding it is verify-then-keep:
-      // if a deployed search ever fails to resolve onnxruntime, drop this line.
+      // Transformers.js pulls both the Node and WASM ONNX runtimes; the Node
+      // build (transformers.node.mjs) imports onnxruntime-node, so the WASM
+      // build and its dependencies never load at runtime here. (sharp is NOT
+      // safe to exclude the same way: transformers.node.mjs imports it at module
+      // load, so dropping it makes the whole package fail with ERR_MODULE_NOT_FOUND.)
       "node_modules/onnxruntime-web/**",
     ],
   },
