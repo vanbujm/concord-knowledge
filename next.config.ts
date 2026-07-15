@@ -6,6 +6,12 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: import.meta.dirname,
   },
+  // Trim the client bundle by letting Next optimize named imports from these
+  // large packages so only the pieces actually used are pulled in. (Next
+  // already does this for lucide-react by default.)
+  experimental: {
+    optimizePackageImports: ["radix-ui"],
+  },
   // Transformers.js and its native ONNX runtime load from node_modules at
   // runtime rather than being bundled into the serverless function.
   serverExternalPackages: ["@huggingface/transformers", "onnxruntime-node"],
@@ -18,6 +24,16 @@ const nextConfig: NextConfig = {
       "node_modules/onnxruntime-node/bin/napi-v*/darwin/**",
       "node_modules/onnxruntime-node/bin/napi-v*/win32/**",
       "node_modules/onnxruntime-node/bin/napi-v*/linux/arm64/**",
+      // sharp is a transitive dependency (of Transformers.js and Next's image
+      // optimizer) that ships large per-platform libvips binaries. This app
+      // uses no next/image and does no image processing, so it is dead weight
+      // in the function.
+      "node_modules/sharp/**",
+      // Transformers.js pulls both the Node and WASM ONNX runtimes; these
+      // routes run under the Node runtime and use onnxruntime-node, so the WASM
+      // build and its dependencies never load. Excluding it is verify-then-keep:
+      // if a deployed search ever fails to resolve onnxruntime, drop this line.
+      "node_modules/onnxruntime-web/**",
     ],
   },
   // The native binding dlopens libonnxruntime.so.1 at runtime. The file tracer
