@@ -20,8 +20,15 @@ export type Facets = {
 
 const SEASON_ORDER = ["Spring", "Summer", "Autumn", "Winter"];
 
-const byCountDescending = (first: FacetCount, second: FacetCount): number =>
-  second.count - first.count;
+// Most documents first; ties broken alphabetically so equal-count values sit in
+// a stable, scannable order rather than whatever order the database returned.
+const byCountThenAlpha = (first: FacetCount, second: FacetCount): number => {
+  if (second.count !== first.count) {
+    return second.count - first.count;
+  }
+
+  return first.value.localeCompare(second.value);
+};
 
 // Newest season first: the most recent in-world events are the most relevant,
 // so they sit at the top of the season filter.
@@ -84,7 +91,7 @@ export const listFacets = async (): Promise<Facets> => {
   const categories: FacetCount[] = categoryRows
     .map((row) => ({ value: row.value, count: Number(row.count) }))
     .filter((category) => !categoryFeedsRealmOrSphere(category.value))
-    .sort(byCountDescending);
+    .sort(byCountThenAlpha);
 
   // Uncategorised is a special bucket (pages with no category), not a real wiki
   // category, so pin it to the top of the list rather than sorting it by count.
@@ -98,8 +105,8 @@ export const listFacets = async (): Promise<Facets> => {
   }));
 
   return {
-    realms: realms.sort(byCountDescending),
-    spheres: spheres.sort(byCountDescending),
+    realms: realms.sort(byCountThenAlpha),
+    spheres: spheres.sort(byCountThenAlpha),
     categories,
     seasons: seasons.sort(byRecency),
   };
