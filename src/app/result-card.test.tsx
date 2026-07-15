@@ -51,6 +51,25 @@ describe("ResultCard", () => {
     expect(screen.getByText("Autumn 226")).toBeInTheDocument();
   });
 
+  it("does not repeat a category the realm or sphere tag already shows", () => {
+    render(
+      <ResultCard
+        result={{
+          ...baseResult,
+          title: "Sphere of Prosperity",
+          realm: null,
+          sphere: "Panoply",
+          categories: ["Panoply", "Ceremonies"],
+          seasons: [],
+        }}
+      />,
+    );
+
+    // "Panoply" appears once (the sphere tag), not again as a category tag.
+    expect(screen.getAllByText("Panoply")).toHaveLength(1);
+    expect(screen.getByText("Ceremonies")).toBeInTheDocument();
+  });
+
   it("wraps the matched term in a mark element", () => {
     render(<ResultCard result={baseResult} />);
 

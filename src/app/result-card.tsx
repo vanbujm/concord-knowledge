@@ -9,6 +9,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { categoryFeedsRealmOrSphere } from "@/ingest/derive-facets";
 import type { HighlightRange } from "@/retrieval/excerpt";
 import type { SearchResult } from "@/retrieval/hybrid-search";
 
@@ -67,10 +68,17 @@ export const ResultCard = ({ result }: { result: SearchResult }) => {
   // The facet tags a result carries, so a card is self-describing and shows why
   // it matched a filter. The explicit wiki categories are filled; the derived
   // facets (realm, sphere, season) are outlined, with seasons muted as context.
+  //
+  // Skip categories the realm or sphere badge already shows (e.g. a "Panoply"
+  // category alongside the "Panoply" sphere) so the row does not repeat itself.
+  const visibleCategories = result.categories.filter(
+    (category) => !categoryFeedsRealmOrSphere(category),
+  );
+
   const hasTags =
     result.realm !== null ||
     result.sphere !== null ||
-    result.categories.length > 0 ||
+    visibleCategories.length > 0 ||
     result.seasons.length > 0;
 
   return (
@@ -102,7 +110,7 @@ export const ResultCard = ({ result }: { result: SearchResult }) => {
               <Badge variant="outline">{result.sphere}</Badge>
             ) : null}
 
-            {result.categories.map((category) => (
+            {visibleCategories.map((category) => (
               <Badge key={category} variant="secondary">
                 {category}
               </Badge>
