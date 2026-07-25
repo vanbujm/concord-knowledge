@@ -111,7 +111,8 @@ describe("runPoll", () => {
 
     const postCall = vi.mocked(postChannelMessage).mock.calls[0][0];
     expect(postCall.mentionUserIds).toEqual(["user-1"]);
-    expect(postCall.content).toBe("<@user-1>");
+    expect(postCall.content).toContain("<@user-1>");
+    expect(postCall.content).toContain("They march again.");
 
     expect(recordAnnounced).toHaveBeenCalledTimes(1);
     const recorded = vi.mocked(recordAnnounced).mock.calls[0][0];

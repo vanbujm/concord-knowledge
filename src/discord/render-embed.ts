@@ -23,6 +23,7 @@ export type DiscordEmbed = {
 const TITLE_MAX = 256;
 const DESCRIPTION_MAX = 4096;
 const FIELD_VALUE_MAX = 1024;
+const CONTENT_MAX = 2000;
 
 const truncate = (text: string, max: number): string =>
   text.length <= max ? text : `${text.slice(0, max - 1).trimEnd()}…`;
@@ -32,11 +33,32 @@ const personaAuthor = (persona: Persona): DiscordEmbed["author"] => ({
   ...(persona.avatarUrl ? { icon_url: persona.avatarUrl } : {}),
 });
 
+// The message content: the raven's dispatch as full-width plain text, prefixed
+// with any @mentions. Kept separate from the embed so the prose is not squeezed
+// into the embed's fixed narrow column.
+export const buildWindsContent = (input: {
+  dispatch: string;
+  mentionUserIds: string[];
+}): string => {
+  const mentionLine =
+    input.mentionUserIds.length > 0
+      ? input.mentionUserIds.map((userId) => `<@${userId}>`).join(" ")
+      : "";
+
+  const body = mentionLine
+    ? `${mentionLine}\n${input.dispatch}`
+    : input.dispatch;
+
+  return truncate(body, CONTENT_MAX);
+};
+
+// The compact card that rides beneath the dispatch: raven identity, the linked
+// entry title, and the interest/affected tags. No description, the prose lives
+// in the message content.
 export const buildWindsEmbed = (input: {
   persona: Persona;
   title: string;
   url: string;
-  dispatch: string;
   matchedKeywords: string[];
   affected: string[];
 }): DiscordEmbed => {
@@ -61,7 +83,6 @@ export const buildWindsEmbed = (input: {
     author: personaAuthor(input.persona),
     title: truncate(input.title, TITLE_MAX),
     url: input.url,
-    description: truncate(input.dispatch, DESCRIPTION_MAX),
     color: input.persona.color,
     ...(fields.length > 0 ? { fields } : {}),
   };

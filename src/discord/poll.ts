@@ -13,7 +13,7 @@ import {
 import { matchKeywords } from "@/discord/match-keywords";
 import { parseWindsEntries, type WindsEntry } from "@/discord/parse-winds";
 import { getPersona } from "@/discord/personas";
-import { buildWindsEmbed } from "@/discord/render-embed";
+import { buildWindsContent, buildWindsEmbed } from "@/discord/render-embed";
 import {
   selectLatestWinds,
   selectNewEntries,
@@ -180,16 +180,16 @@ export const runPoll = async (input: { backfill: boolean }): Promise<void> => {
     const mentionUserIds = matchedScopes.filter(
       (scope) => scope !== GENERAL_SCOPE,
     );
-    const content =
-      mentionUserIds.length > 0
-        ? mentionUserIds.map((userId) => `<@${userId}>`).join(" ")
-        : undefined;
+
+    const content = buildWindsContent({
+      dispatch: analysis.dispatch,
+      mentionUserIds,
+    });
 
     const embed = buildWindsEmbed({
       persona,
       title: entry.displayText ?? entry.entryTitle,
       url: sourceUrlForTitle(entry.entryTitle),
-      dispatch: analysis.dispatch,
       matchedKeywords: unionKeywords,
       affected: entry.affected,
     });

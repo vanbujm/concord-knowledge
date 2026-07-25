@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import type { Persona } from "@/discord/personas";
-import { buildSearchEmbed, buildWindsEmbed } from "@/discord/render-embed";
+import {
+  buildSearchEmbed,
+  buildWindsContent,
+  buildWindsEmbed,
+} from "@/discord/render-embed";
 
 const persona: Persona = {
   key: "diceria",
@@ -11,13 +15,42 @@ const persona: Persona = {
   voiceBrief: "test",
 };
 
+describe("buildWindsContent", () => {
+  it("puts mentions and the dispatch in the message content", () => {
+    const content = buildWindsContent({
+      dispatch: "They stir again in the south.",
+      mentionUserIds: ["u1", "u2"],
+    });
+
+    expect(content).toBe("<@u1> <@u2>\nThey stir again in the south.");
+  });
+
+  it("omits the mention line when nobody is tagged", () => {
+    const content = buildWindsContent({
+      dispatch: "A general concern.",
+      mentionUserIds: [],
+    });
+
+    expect(content).toBe("A general concern.");
+  });
+
+  it("truncates over-long content to Discord's 2000-char limit", () => {
+    const content = buildWindsContent({
+      dispatch: "D".repeat(2500),
+      mentionUserIds: [],
+    });
+
+    expect(content.length).toBe(2000);
+    expect(content.endsWith("…")).toBe(true);
+  });
+});
+
 describe("buildWindsEmbed", () => {
-  it("attributes the embed to the raven and links the title", () => {
+  it("attributes the card to the raven, links the title, and lists the tags", () => {
     const embed = buildWindsEmbed({
       persona,
       title: "The War Against the Drowned",
       url: "https://wiki.example/War",
-      dispatch: "They stir again in the south.",
       matchedKeywords: ["the drowned", "lerona mere"],
       affected: ["Lerona Mere", "The War Chamber"],
     });
@@ -28,8 +61,8 @@ describe("buildWindsEmbed", () => {
     });
     expect(embed.title).toBe("The War Against the Drowned");
     expect(embed.url).toBe("https://wiki.example/War");
-    expect(embed.description).toBe("They stir again in the south.");
     expect(embed.color).toBe(0x8a1c1c);
+    expect(embed.description).toBeUndefined();
     expect(embed.fields?.[0]).toEqual({
       name: "Of interest",
       value: "the drowned, lerona mere",
@@ -41,7 +74,6 @@ describe("buildWindsEmbed", () => {
       persona,
       title: "Quiet",
       url: "https://wiki.example/Quiet",
-      dispatch: "Nothing to report.",
       matchedKeywords: [],
       affected: [],
     });
@@ -49,20 +81,17 @@ describe("buildWindsEmbed", () => {
     expect(embed.fields).toBeUndefined();
   });
 
-  it("truncates an over-long title and description to Discord limits", () => {
+  it("truncates an over-long title to Discord's limit", () => {
     const embed = buildWindsEmbed({
       persona,
       title: "T".repeat(300),
       url: "https://wiki.example/Long",
-      dispatch: "D".repeat(5000),
       matchedKeywords: [],
       affected: [],
     });
 
     expect(embed.title?.length).toBe(256);
     expect(embed.title?.endsWith("…")).toBe(true);
-    expect(embed.description?.length).toBe(4096);
-    expect(embed.description?.endsWith("…")).toBe(true);
   });
 });
 
