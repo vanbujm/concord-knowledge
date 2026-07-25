@@ -171,6 +171,36 @@ export const fetchAllPageStubs = async (): Promise<PageStub[]> => {
   return stubs;
 };
 
+// List every ns 0 page whose title starts with `prefix`, then fetch their
+// wikitext, revision ids, and categories. Lets a caller pull one page family
+// (e.g. "Winds of the World") without walking the whole corpus.
+export const fetchPagesByPrefix = async (
+  prefix: string,
+): Promise<WikiPage[]> => {
+  const stubs: PageStub[] = [];
+
+  let continueParams: Record<string, string> | undefined;
+
+  do {
+    const data = await apiGet(
+      {
+        action: "query",
+        list: "allpages",
+        apnamespace: "0",
+        apprefix: prefix,
+        aplimit: "500",
+        ...continueParams,
+      },
+      allPagesResponseSchema,
+    );
+
+    stubs.push(...data.query.allpages);
+    continueParams = data.continue;
+  } while (continueParams);
+
+  return fetchPageContents(stubs);
+};
+
 const normalizePage = (page: z.infer<typeof pageContentSchema>): WikiPage => {
   const revision = page.revisions?.[0];
 
