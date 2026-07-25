@@ -73,6 +73,16 @@ Point any MCP-capable client at **`/api/mcp`** (Streamable HTTP). Three tools ar
 > [!TIP]
 > Every tool returns short **cited excerpts plus a source URL**, never full page text. The full content always lives at the linked wiki page.
 
+## 🐦‍⬛ Discord ravens
+
+Two ravens, **Diceria** (rumour) and **Ricordo** (memory), watch the wiki's [Winds of the World](https://wiki.concordlarp.com/index.php/Winds_of_the_World) newsletter for the warband **The Sablier Rouge** and speak in a Discord channel. They share one bot; the raven identity rides in each embed's author line, and the LLM picks which one fits a given message.
+
+- 📨 **Winds watcher.** A scheduled job finds new entries on the latest Winds page, judges each against the guild's registered keywords (an exact match, or the LLM judging it _related_), and posts the relevant ones as a raven-authored embed, @mentioning the members whose personal keywords matched.
+- 🏷️ **`/interests`** lets a member `add` / `remove` / `list` the keywords watched for them. Keywords come in two tiers: **general** (band-wide, seeded) and **personal**.
+- 🔎 **`/search`** runs the same hybrid search as the MCP, from Discord, returning a short set of cited results with wiki links.
+
+Winds posts go out from a Bun job on GitHub Actions (Discord REST, no gateway daemon); slash commands are served by `/api/discord/interactions` on Vercel (Ed25519-verified, deferred for `/search`). Relevance and the ravens' prose use the Anthropic API (`claude-opus-4-8` by default). Register the commands once with `bun run discord:register`.
+
 ## 🧱 Tech stack
 
 | Layer | Choice |
@@ -144,6 +154,15 @@ The web UI lives at `/`, the search API at `/api/search`, and the MCP server at 
 | `CONCORD_WIKI_BASE_URL` | Canonical wiki source, used for ingestion and for attribution deep-links. |
 | `UPSTASH_REDIS_REST_URL` | Upstash Redis endpoint for per-IP rate limiting. Leave blank in local dev to disable it. |
 | `UPSTASH_REDIS_REST_TOKEN` | Auth token for the Upstash endpoint. |
+| `DISCORD_BOT_TOKEN` | Ravens bot token: posts Winds updates and registers slash commands. |
+| `DISCORD_APP_ID` | Ravens application id: slash-command registration and deferred-reply edits. |
+| `DISCORD_PUBLIC_KEY` | Ravens application public key: verifies incoming slash-command signatures. |
+| `DISCORD_CHANNEL_ID` | Channel the ravens post Winds updates to. |
+| `DISCORD_GUILD_ID` | The Sablier Rouge (& Co.) guild id. |
+| `ANTHROPIC_API_KEY` | Anthropic API key for the ravens' relevance judgement and dispatches. |
+| `CONCORD_CROW_MODEL` | Optional model override for the ravens (defaults to `claude-opus-4-8`). |
+| `DICERIA_AVATAR_URL` / `RICORDO_AVATAR_URL` | Optional public URLs for the raven embed-author icons. |
+| `SEED_DISCORD_USER_ID` | Optional: a Discord user id whose personal keywords the seed loads. |
 
 ## 📜 Scripts
 
@@ -153,6 +172,8 @@ The web UI lives at `/`, the search API at `/api/search`, and the MCP server at 
 | `bun run build` | Generate the Prisma client, then build for production. |
 | `bun run start` | Serve the production build. |
 | `bun run ingest` | Run the incremental ingestion pipeline. |
+| `bun run discord:poll` | Poll the Winds of the World and post to Discord. `--backfill` baselines without posting. |
+| `bun run discord:register` | Register the ravens' slash commands to the guild (one-time, or after changes). |
 | `bun run lint` | ESLint. |
 | `bun run typecheck` | `tsc --noEmit`. |
 | `bun run test` | Vitest (one-shot). `test:watch` for watch mode. |
@@ -164,19 +185,23 @@ src/
 ├── app/                 Next.js App Router: web UI + routes
 │   └── api/
 │       ├── search/      Web search endpoint
-│       └── [transport]/ MCP server (/api/mcp)
+│       ├── [transport]/ MCP server (/api/mcp)
+│       └── discord/     Slash-command interactions endpoint
 ├── ingest/              Fetch → detect-changes → clean → chunk → embed → upsert
 ├── retrieval/           Hybrid search, embeddings, facets, page/excerpt shaping
+├── discord/             Ravens: Winds poller, personas, /search + /interests
 ├── db/                  Prisma client wiring
 ├── components/ui/       shadcn/ui components
 └── config/, lib/        Display config, rate limiting, shared utils
 prisma/                  schema + migrations (pgvector, generated tsvector, HNSW index)
-.github/workflows/       ingest.yml — daily corpus refresh
+.github/workflows/       ingest.yml — daily corpus refresh · discord-poll.yml — ravens
 ```
 
 ## 🔄 Keeping the corpus fresh
 
 The **[`Ingest wiki`](.github/workflows/ingest.yml)** GitHub Action runs daily at **15:37 UTC** (and on demand via _workflow dispatch_). It checks the wiki for changed revisions first and short-circuits when nothing moved, so idle days never load the model or fetch page content.
+
+The **[`Discord ravens poll`](.github/workflows/discord-poll.yml)** Action runs daily at **16:07 UTC** (offset from the ingest, plus _workflow dispatch_), watching the latest Winds of the World page and posting new entries of interest to the Sablier Rouge Discord.
 
 ## ⚖️ Attribution & posture
 
