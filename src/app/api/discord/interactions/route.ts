@@ -5,6 +5,7 @@ import { editOriginalInteractionResponse } from "@/discord/discord-rest";
 import {
   InteractionResponseType,
   InteractionType,
+  isAllowedGuild,
   MessageFlags,
   parseCommand,
   verifyInteractionSignature,
@@ -193,6 +194,10 @@ export const POST = async (request: Request): Promise<Response> => {
 
   if (interaction.type === InteractionType.APPLICATION_COMMAND) {
     const command = parseCommand(interaction);
+
+    if (!isAllowedGuild(command.guildId, process.env.DISCORD_GUILD_ID)) {
+      return ephemeral("The ravens only answer within the Sablier Rouge.");
+    }
 
     if (command.name === "interests") {
       return handleInterests(command);

@@ -3,6 +3,7 @@ import { generateKeyPairSync, sign as cryptoSign } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
 import {
+  isAllowedGuild,
   parseCommand,
   verifyInteractionSignature,
   type DiscordInteraction,
@@ -115,5 +116,25 @@ describe("parseCommand", () => {
 
     expect(parsed.userId).toBe("dm-user");
     expect(parsed.guildId).toBeNull();
+  });
+});
+
+describe("isAllowedGuild", () => {
+  const allowed = "guild-1";
+
+  it("allows the configured guild", () => {
+    expect(isAllowedGuild("guild-1", allowed)).toBe(true);
+  });
+
+  it("rejects a different guild", () => {
+    expect(isAllowedGuild("guild-2", allowed)).toBe(false);
+  });
+
+  it("rejects a DM with no guild", () => {
+    expect(isAllowedGuild(null, allowed)).toBe(false);
+  });
+
+  it("allows anything when no guild is configured (local dev)", () => {
+    expect(isAllowedGuild("guild-2", undefined)).toBe(true);
   });
 });

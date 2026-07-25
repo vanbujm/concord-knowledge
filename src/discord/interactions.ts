@@ -110,3 +110,12 @@ export const parseCommand = (
     guildId,
   };
 };
+
+// Guard so the commands only work in the configured guild: even if the bot is
+// invited to another server, interactions from a different guild (or a DM) are
+// refused, so they cannot touch the API key or database. When no guild is
+// configured (local dev), everything is allowed.
+export const isAllowedGuild = (
+  guildId: string | null,
+  allowedGuildId: string | undefined,
+): boolean => !allowedGuildId || guildId === allowedGuildId;
