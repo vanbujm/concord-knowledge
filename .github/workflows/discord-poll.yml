@@ -5,8 +5,10 @@ name: Discord ravens poll
 # embedding model, so unlike the ingest job there is no model cache step.
 on:
   schedule:
-    # Daily at 16:07 UTC, offset from the ingest job (15:37) to spread load.
-    - cron: "7 16 * * *"
+    # Four times a day, evenly spaced across 8am-8pm Perth time (AWST = UTC+8):
+    # 08:00 / 12:00 / 16:00 / 20:00 AWST is 00:00 / 04:00 / 08:00 / 12:00 UTC.
+    # Minute 7 keeps runs off the top of the hour (GitHub's scheduling backlog).
+    - cron: "7 0,4,8,12 * * *"
   workflow_dispatch:
 
 # Never let a manual run overlap a scheduled one against the same database.
