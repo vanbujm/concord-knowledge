@@ -52,3 +52,40 @@ model Chunk {
 
   @@index([documentId])
 }
+
+/// One Winds-of-the-World entry (a linked sub-page) the ravens have processed.
+/// A row is written whether or not it was posted. `announcedAt` null means the
+/// entry was seen but not posted: either a first-run baseline of a Winds page,
+/// or an entry that matched no keyword. That seen-only marker is what keeps a
+/// first run from flooding the channel with a whole season's backlog.
+model WindsAnnouncement {
+  id               String    @id @default(cuid())
+  windsPageId      Int
+  windsTitle       String
+  entryTitle       String
+  season           String?
+  persona          String?
+  matchedScopes    String[]
+  matchedKeywords  String[]
+  announcedAt      DateTime?
+  discordMessageId String?
+  firstSeenAt      DateTime  @default(now())
+
+  @@unique([windsPageId, entryTitle])
+  @@index([windsPageId])
+}
+
+/// A registered keyword the ravens watch for. `scope` is the literal string
+/// "general" to signal a band-wide keyword everyone shares, or a Discord user
+/// id for a personal one. Discord user ids are all-digit snowflakes, so they
+/// never collide with the word "general". One row per (scope, keyword).
+model Interest {
+  id        String   @id @default(cuid())
+  guildId   String
+  scope     String
+  keyword   String
+  createdAt DateTime @default(now())
+
+  @@unique([guildId, scope, keyword])
+  @@index([guildId])
+}
