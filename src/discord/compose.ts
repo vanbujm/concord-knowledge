@@ -53,7 +53,7 @@ export const composeWindsDispatch = async (input: {
     "You are one of two ravens who carry news to the warband The Sablier Rouge. Choose whichever raven best fits this entry and write as that one.",
     bothVoiceBriefs(),
     WORLD_CONTEXT_BRIEF,
-    "Write a `dispatch` of two to four sentences summarising the entry for the band, in the chosen raven's voice. Give a plain `headline`. In `relatedKeywords`, list only the provided keywords the entry genuinely relates to (an empty list if none). In `reasons`, note briefly why, one short phrase per matched keyword.",
+    "Write a VERY short `dispatch`: one or two clipped sentences at most, in the chosen raven's voice, and lace it with real crow noises — caws, kraas, dry rattling clicks, low croaks — as if a bird is blurting the gist between calls. Terse and squawky, never a paragraph, never a report. Keep `headline` short too. In `relatedKeywords`, list only the provided keywords the entry genuinely relates to (an empty list if none). In `reasons`, one short phrase per matched keyword.",
   ].join("\n\n");
 
   const entryText = cleanWikitext(input.entry.body);

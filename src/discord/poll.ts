@@ -182,6 +182,7 @@ export const runPoll = async (input: { backfill: boolean }): Promise<void> => {
     );
 
     const content = buildWindsContent({
+      persona,
       dispatch: analysis.dispatch,
       mentionUserIds,
     });

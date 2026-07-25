@@ -37,6 +37,7 @@ const personaAuthor = (persona: Persona): DiscordEmbed["author"] => ({
 // with any @mentions. Kept separate from the embed so the prose is not squeezed
 // into the embed's fixed narrow column.
 export const buildWindsContent = (input: {
+  persona: Persona;
   dispatch: string;
   mentionUserIds: string[];
 }): string => {
@@ -45,9 +46,8 @@ export const buildWindsContent = (input: {
       ? input.mentionUserIds.map((userId) => `<@${userId}>`).join(" ")
       : "";
 
-  const body = mentionLine
-    ? `${mentionLine}\n${input.dispatch}`
-    : input.dispatch;
+  const line = `**${input.persona.name}** ${input.dispatch}`;
+  const body = mentionLine ? `${mentionLine}\n${line}` : line;
 
   return truncate(body, CONTENT_MAX);
 };
@@ -80,7 +80,6 @@ export const buildWindsEmbed = (input: {
   }
 
   return {
-    author: personaAuthor(input.persona),
     title: truncate(input.title, TITLE_MAX),
     url: input.url,
     color: input.persona.color,

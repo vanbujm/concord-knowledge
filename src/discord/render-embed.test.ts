@@ -16,26 +16,31 @@ const persona: Persona = {
 };
 
 describe("buildWindsContent", () => {
-  it("puts mentions and the dispatch in the message content", () => {
+  it("prepends the raven name, after any mentions, before the dispatch", () => {
     const content = buildWindsContent({
+      persona,
       dispatch: "They stir again in the south.",
       mentionUserIds: ["u1", "u2"],
     });
 
-    expect(content).toBe("<@u1> <@u2>\nThey stir again in the south.");
+    expect(content).toBe(
+      "<@u1> <@u2>\n**Diceria** They stir again in the south.",
+    );
   });
 
   it("omits the mention line when nobody is tagged", () => {
     const content = buildWindsContent({
+      persona,
       dispatch: "A general concern.",
       mentionUserIds: [],
     });
 
-    expect(content).toBe("A general concern.");
+    expect(content).toBe("**Diceria** A general concern.");
   });
 
   it("truncates over-long content to Discord's 2000-char limit", () => {
     const content = buildWindsContent({
+      persona,
       dispatch: "D".repeat(2500),
       mentionUserIds: [],
     });
@@ -55,10 +60,7 @@ describe("buildWindsEmbed", () => {
       affected: ["Lerona Mere", "The War Chamber"],
     });
 
-    expect(embed.author).toEqual({
-      name: "Diceria",
-      icon_url: "https://example.test/diceria.png",
-    });
+    expect(embed.author).toBeUndefined();
     expect(embed.title).toBe("The War Against the Drowned");
     expect(embed.url).toBe("https://wiki.example/War");
     expect(embed.color).toBe(0x8a1c1c);
