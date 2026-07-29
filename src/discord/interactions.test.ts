@@ -3,6 +3,7 @@ import { generateKeyPairSync, sign as cryptoSign } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
 import {
+  hasGuildManagerPermission,
   isAllowedGuild,
   parseCommand,
   verifyInteractionSignature,
@@ -72,10 +73,12 @@ describe("parseCommand", () => {
 
     expect(parseCommand(interaction)).toEqual({
       name: "search",
+      subcommandGroup: null,
       subcommand: null,
       options: { query: "stallia" },
       userId: "user-1",
       guildId: "guild-1",
+      memberPermissions: null,
     });
   });
 
@@ -98,11 +101,71 @@ describe("parseCommand", () => {
 
     expect(parseCommand(interaction)).toEqual({
       name: "interests",
+      subcommandGroup: null,
       subcommand: "add",
       options: { keyword: "Drowned" },
       userId: "user-1",
       guildId: "guild-1",
+      memberPermissions: null,
     });
+  });
+
+  it("unwraps a subcommand group's nested options", () => {
+    const interaction: DiscordInteraction = {
+      type: 2,
+      guild_id: "guild-1",
+      member: { user: { id: "user-1" }, permissions: "8" },
+      data: {
+        name: "warband",
+        options: [
+          {
+            name: "interests",
+            type: 2,
+            options: [
+              {
+                name: "add",
+                type: 1,
+                options: [{ name: "keyword", type: 3, value: "Fae Queen" }],
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    expect(parseCommand(interaction)).toEqual({
+      name: "warband",
+      subcommandGroup: "interests",
+      subcommand: "add",
+      options: { keyword: "Fae Queen" },
+      userId: "user-1",
+      guildId: "guild-1",
+      memberPermissions: "8",
+    });
+  });
+
+  it("reads a parameterless subcommand inside a group", () => {
+    const interaction: DiscordInteraction = {
+      type: 2,
+      guild_id: "guild-1",
+      member: { user: { id: "user-1" } },
+      data: {
+        name: "warband",
+        options: [
+          {
+            name: "interests",
+            type: 2,
+            options: [{ name: "list", type: 1 }],
+          },
+        ],
+      },
+    };
+
+    const parsed = parseCommand(interaction);
+
+    expect(parsed.subcommandGroup).toBe("interests");
+    expect(parsed.subcommand).toBe("list");
+    expect(parsed.options).toEqual({});
   });
 
   it("falls back to the top-level user in a DM context", () => {
@@ -136,5 +199,33 @@ describe("isAllowedGuild", () => {
 
   it("allows anything when no guild is configured (local dev)", () => {
     expect(isAllowedGuild("guild-2", undefined)).toBe(true);
+  });
+});
+
+describe("hasGuildManagerPermission", () => {
+  const ADMINISTRATOR = "8";
+  const MANAGE_GUILD = "32";
+  const SEND_MESSAGES = "2048";
+
+  it("accepts an administrator", () => {
+    expect(hasGuildManagerPermission(ADMINISTRATOR)).toBe(true);
+  });
+
+  it("accepts manage guild on its own", () => {
+    expect(hasGuildManagerPermission(MANAGE_GUILD)).toBe(true);
+  });
+
+  it("accepts a full permission bitfield beyond Number.MAX_SAFE_INTEGER", () => {
+    expect(hasGuildManagerPermission("140737488355327")).toBe(true);
+  });
+
+  it("rejects a member with unrelated permissions", () => {
+    expect(hasGuildManagerPermission(SEND_MESSAGES)).toBe(false);
+  });
+
+  it("rejects a missing or unparseable bitfield", () => {
+    expect(hasGuildManagerPermission(null)).toBe(false);
+    expect(hasGuildManagerPermission("")).toBe(false);
+    expect(hasGuildManagerPermission("not-a-number")).toBe(false);
   });
 });
