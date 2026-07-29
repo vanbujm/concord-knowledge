@@ -5,7 +5,13 @@ import { logEvent } from "@/log";
 // command definition changes updates them immediately. Run: bun run discord:register.
 
 const SUB_COMMAND = 1;
+const SUB_COMMAND_GROUP = 2;
 const STRING = 3;
+
+// Manage Server, as a decimal permission bitfield. Discord hides a command with
+// this set from members who lack it; Administrator holders have it implicitly.
+// Set to "8" to narrow the gate to Administrator alone.
+const MANAGE_GUILD = "32";
 
 const commands = [
   {
@@ -54,6 +60,51 @@ const commands = [
         type: SUB_COMMAND,
         name: "list",
         description: "List your keywords and the band's shared ones.",
+      },
+    ],
+  },
+  {
+    name: "warband",
+    description: "Manage what the ravens watch for the whole warband.",
+    default_member_permissions: MANAGE_GUILD,
+    options: [
+      {
+        type: SUB_COMMAND_GROUP,
+        name: "interests",
+        description: "Manage the warband's shared keywords.",
+        options: [
+          {
+            type: SUB_COMMAND,
+            name: "add",
+            description: "Add a keyword the ravens watch for everyone.",
+            options: [
+              {
+                type: STRING,
+                name: "keyword",
+                description: "The keyword to watch for.",
+                required: true,
+              },
+            ],
+          },
+          {
+            type: SUB_COMMAND,
+            name: "remove",
+            description: "Remove a keyword from the warband's shared list.",
+            options: [
+              {
+                type: STRING,
+                name: "keyword",
+                description: "The keyword to stop watching.",
+                required: true,
+              },
+            ],
+          },
+          {
+            type: SUB_COMMAND,
+            name: "list",
+            description: "List the warband's shared keywords.",
+          },
+        ],
       },
     ],
   },

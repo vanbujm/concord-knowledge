@@ -3,6 +3,7 @@ import { after } from "next/server";
 import { composeSearchIntro } from "@/discord/compose";
 import { editOriginalInteractionResponse } from "@/discord/discord-rest";
 import {
+  hasGuildManagerPermission,
   InteractionResponseType,
   InteractionType,
   isAllowedGuild,
@@ -86,6 +87,57 @@ const handleInterests = async (command: ParsedCommand): Promise<Response> => {
   }
 
   return ephemeral("Use /interests add, remove, or list.");
+};
+
+const handleWarbandInterests = async (
+  command: ParsedCommand,
+): Promise<Response> => {
+  if (!command.guildId) {
+    return ephemeral("This command only works inside a server.");
+  }
+
+  if (!hasGuildManagerPermission(command.memberPermissions)) {
+    return ephemeral(
+      "Only the warband's officers may change the shared keywords. Use /interests to manage your own.",
+    );
+  }
+
+  const guildId = command.guildId;
+  const scope = GENERAL_SCOPE;
+
+  if (command.subcommand === "add") {
+    const keyword = command.options.keyword ?? "";
+    const added = await addInterest({ guildId, scope, keyword });
+
+    return ephemeral(
+      added
+        ? `Added **${keyword}** to the warband's keywords. The ravens now watch it for everyone.`
+        : `**${keyword}** is already on the warband's list (or was empty).`,
+    );
+  }
+
+  if (command.subcommand === "remove") {
+    const keyword = command.options.keyword ?? "";
+    const removed = await removeInterest({ guildId, scope, keyword });
+
+    return ephemeral(
+      removed
+        ? `Removed **${keyword}** from the warband's keywords.`
+        : `**${keyword}** was not on the warband's list.`,
+    );
+  }
+
+  if (command.subcommand === "list") {
+    const general = await listInterests({ guildId, scope });
+
+    return ephemeral(
+      general.length > 0
+        ? `**Warband keywords:** ${general.join(", ")}`
+        : "The warband has no shared keywords yet. Add one with /warband interests add.",
+    );
+  }
+
+  return ephemeral("Use /warband interests add, remove, or list.");
 };
 
 const handleSearch = (
@@ -201,6 +253,10 @@ export const POST = async (request: Request): Promise<Response> => {
 
     if (command.name === "interests") {
       return handleInterests(command);
+    }
+
+    if (command.name === "warband" && command.subcommandGroup === "interests") {
+      return handleWarbandInterests(command);
     }
 
     if (command.name === "search") {

@@ -78,7 +78,8 @@ Point any MCP-capable client at **`/api/mcp`** (Streamable HTTP). Three tools ar
 Two ravens, **Diceria** (rumour) and **Ricordo** (memory), watch the wiki's [Winds of the World](https://wiki.concordlarp.com/index.php/Winds_of_the_World) newsletter for the warband **The Sablier Rouge** and speak in a Discord channel. They share one bot; the raven identity rides in each embed's author line, and the LLM picks which one fits a given message.
 
 - 📨 **Winds watcher.** A scheduled job finds new entries on the latest Winds page, judges each against the guild's registered keywords (an exact match, or the LLM judging it _related_), and posts the relevant ones as a raven-authored embed, @mentioning the members whose personal keywords matched.
-- 🏷️ **`/interests`** lets a member `add` / `remove` / `list` the keywords watched for them. Keywords come in two tiers: **general** (band-wide, seeded) and **personal**.
+- 🏷️ **`/interests`** lets a member `add` / `remove` / `list` the keywords watched for them. Keywords come in two tiers: **general** (band-wide) and **personal**.
+- 🛡️ **`/warband interests`** manages the general tier: `add` / `remove` / `list` the keywords the ravens watch for everyone. Gated to members with **Manage Server** (Administrator included), both by `default_member_permissions` at registration and by re-checking the member's permission bitfield in the handler, since a server admin can re-grant a command under Integrations settings. A general keyword makes an entry post to the channel without @mentioning anyone.
 - 🔎 **`/search`** runs the same hybrid search as the MCP, from Discord, returning a short set of cited results with wiki links.
 
 Winds posts go out from a Bun job on GitHub Actions (Discord REST, no gateway daemon); slash commands are served by `/api/discord/interactions` on Vercel (Ed25519-verified, deferred for `/search`). Relevance and the ravens' prose use the Anthropic API (`claude-opus-4-8` by default). Register the commands once with `bun run discord:register`.
@@ -189,7 +190,7 @@ src/
 │       └── discord/     Slash-command interactions endpoint
 ├── ingest/              Fetch → detect-changes → clean → chunk → embed → upsert
 ├── retrieval/           Hybrid search, embeddings, facets, page/excerpt shaping
-├── discord/             Ravens: Winds poller, personas, /search + /interests
+├── discord/             Ravens: Winds poller, personas, /search + /interests + /warband
 ├── db/                  Prisma client wiring
 ├── components/ui/       shadcn/ui components
 └── config/, lib/        Display config, rate limiting, shared utils
