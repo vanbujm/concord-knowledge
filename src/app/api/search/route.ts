@@ -1,6 +1,6 @@
 import * as z from "zod";
 
-import { MAX_RESULT_LIMIT } from "@/config/display";
+import { MAX_QUERY_CHARS, MAX_RESULT_LIMIT } from "@/config/display";
 import { checkRateLimit, clientIdentifier } from "@/rate-limit";
 import { warmEmbeddingModel } from "@/retrieval/embedding";
 import { runHybridSearch } from "@/retrieval/hybrid-search";
@@ -12,7 +12,10 @@ import { runHybridSearch } from "@/retrieval/hybrid-search";
 // never full page text.
 
 const querySchema = z.object({
-  q: z.string().min(1, "A search query is required."),
+  q: z
+    .string()
+    .min(1, "A search query is required.")
+    .max(MAX_QUERY_CHARS, `A search query is at most ${MAX_QUERY_CHARS} characters.`),
   realm: z.array(z.string()).optional(),
   sphere: z.array(z.string()).optional(),
   category: z.array(z.string()).optional(),

@@ -1,3 +1,4 @@
+import { MAX_QUERY_CHARS } from "@/config/display";
 import { logEvent } from "@/log";
 
 // One-time slash-command registration. Registers the ravens' commands to a
@@ -23,6 +24,7 @@ const commands = [
         name: "query",
         description: "What to search for.",
         required: true,
+        max_length: MAX_QUERY_CHARS,
       },
     ],
   },

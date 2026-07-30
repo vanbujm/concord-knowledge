@@ -1,7 +1,7 @@
 import { createMcpHandler } from "mcp-handler";
 import * as z from "zod";
 
-import { MAX_RESULT_LIMIT } from "@/config/display";
+import { MAX_QUERY_CHARS, MAX_RESULT_LIMIT } from "@/config/display";
 import { checkRateLimit, clientIdentifier } from "@/rate-limit";
 import { listFacets } from "@/retrieval/facets";
 import { getPageByTitle } from "@/retrieval/get-page";
@@ -23,7 +23,11 @@ const mcpHandler = createMcpHandler(
         title: "Search the Concord wiki",
         description: `Hybrid semantic + keyword search over the Concord LARP wiki. ${POSTURE}`,
         inputSchema: {
-          query: z.string().min(1).describe("What to search for."),
+          query: z
+            .string()
+            .min(1)
+            .max(MAX_QUERY_CHARS)
+            .describe("What to search for."),
           realm: z
             .array(z.string())
             .optional()
