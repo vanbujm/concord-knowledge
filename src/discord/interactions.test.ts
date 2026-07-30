@@ -183,22 +183,52 @@ describe("parseCommand", () => {
 });
 
 describe("isAllowedGuild", () => {
-  const allowed = "guild-1";
+  const allowedGuildId = "guild-1";
 
   it("allows the configured guild", () => {
-    expect(isAllowedGuild("guild-1", allowed)).toBe(true);
+    expect(
+      isAllowedGuild({
+        guildId: "guild-1",
+        allowedGuildId,
+        isProduction: true,
+      }),
+    ).toBe(true);
   });
 
   it("rejects a different guild", () => {
-    expect(isAllowedGuild("guild-2", allowed)).toBe(false);
+    expect(
+      isAllowedGuild({
+        guildId: "guild-2",
+        allowedGuildId,
+        isProduction: true,
+      }),
+    ).toBe(false);
   });
 
   it("rejects a DM with no guild", () => {
-    expect(isAllowedGuild(null, allowed)).toBe(false);
+    expect(
+      isAllowedGuild({ guildId: null, allowedGuildId, isProduction: true }),
+    ).toBe(false);
   });
 
-  it("allows anything when no guild is configured (local dev)", () => {
-    expect(isAllowedGuild("guild-2", undefined)).toBe(true);
+  it("allows anything when no guild is configured outside production", () => {
+    expect(
+      isAllowedGuild({
+        guildId: "guild-2",
+        allowedGuildId: undefined,
+        isProduction: false,
+      }),
+    ).toBe(true);
+  });
+
+  it("refuses everything when no guild is configured in production", () => {
+    expect(
+      isAllowedGuild({
+        guildId: "guild-2",
+        allowedGuildId: undefined,
+        isProduction: true,
+      }),
+    ).toBe(false);
   });
 });
 

@@ -129,12 +129,24 @@ export const parseCommand = (
 
 // Guard so the commands only work in the configured guild: even if the bot is
 // invited to another server, interactions from a different guild (or a DM) are
-// refused, so they cannot touch the API key or database. When no guild is
-// configured (local dev), everything is allowed.
-export const isAllowedGuild = (
-  guildId: string | null,
-  allowedGuildId: string | undefined,
-): boolean => !allowedGuildId || guildId === allowedGuildId;
+// refused, so they cannot touch the API key or database.
+//
+// When no guild is configured the guard has nothing to compare against. Outside
+// production that means local dev, where allowing everything is the convenience
+// we want. In production it means the setting was forgotten, and silently
+// allowing every guild would turn a missing environment variable into an open
+// door, so the guard refuses instead.
+export const isAllowedGuild = (input: {
+  guildId: string | null;
+  allowedGuildId: string | undefined;
+  isProduction: boolean;
+}): boolean => {
+  if (!input.allowedGuildId) {
+    return !input.isProduction;
+  }
+
+  return input.guildId === input.allowedGuildId;
+};
 
 // Discord sends a member's computed permissions as a decimal bitfield string,
 // because the field can outgrow the largest integer a JS number holds exactly.

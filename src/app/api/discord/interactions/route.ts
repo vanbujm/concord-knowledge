@@ -247,7 +247,13 @@ export const POST = async (request: Request): Promise<Response> => {
   if (interaction.type === InteractionType.APPLICATION_COMMAND) {
     const command = parseCommand(interaction);
 
-    if (!isAllowedGuild(command.guildId, process.env.DISCORD_GUILD_ID)) {
+    const allowedGuild = isAllowedGuild({
+      guildId: command.guildId,
+      allowedGuildId: process.env.DISCORD_GUILD_ID,
+      isProduction: process.env.NODE_ENV === "production",
+    });
+
+    if (!allowedGuild) {
       return ephemeral("The ravens only answer within the Sablier Rouge.");
     }
 
