@@ -21,9 +21,15 @@ const WINDOW_MS = 1000 * 60;
 // without bound across a long-lived instance.
 const MAX_TRACKED_IDENTIFIERS = 10000;
 
+// Two naming conventions reach the same Upstash database. Provisioning it
+// through the Vercel marketplace injects KV_REST_API_URL and KV_REST_API_TOKEN;
+// creating one directly on upstash.com gives the UPSTASH_REDIS_REST_ names
+// instead. Read whichever pair is present so neither route needs the values
+// copied into a second variable.
 const createUpstashLimiter = (): Ratelimit | null => {
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  const url = process.env.KV_REST_API_URL ?? process.env.UPSTASH_REDIS_REST_URL;
+  const token =
+    process.env.KV_REST_API_TOKEN ?? process.env.UPSTASH_REDIS_REST_TOKEN;
 
   if (!url || !token) {
     return null;
