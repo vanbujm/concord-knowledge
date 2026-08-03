@@ -173,7 +173,7 @@ The web UI lives at `/`, the search API at `/api/search`, and the MCP server at 
 | `bun run build` | Generate the Prisma client, then build for production. |
 | `bun run start` | Serve the production build. |
 | `bun run ingest` | Run the incremental ingestion pipeline. |
-| `bun run discord:poll` | Poll the Winds of the World and post to Discord. `--backfill` baselines without posting. |
+| `bun run discord:poll` | Poll the Winds of the World and post to Discord. `--backfill` baselines without posting. `--dry-run` prints the dispatches it would send and writes nothing, `--season "Autumn 226"` points it at a named season rather than the newest, and `--limit N` caps how many a dry run composes (default 1). |
 | `bun run discord:register` | Register the ravens' slash commands to the guild (one-time, or after changes). |
 | `bun run lint` | ESLint. |
 | `bun run typecheck` | `tsc --noEmit`. |

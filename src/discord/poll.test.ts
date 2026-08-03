@@ -35,9 +35,12 @@ vi.mock("@/ingest/upsert", () => ({
     `https://wiki.example/${encodeURIComponent(title)}`,
 }));
 
-const windsPage = (wikitext: string): WikiPage => ({
+const windsPage = (
+  wikitext: string,
+  title = "Winds of the World - Autumn 226",
+): WikiPage => ({
   pageId: 1090,
-  title: "Winds of the World - Autumn 226",
+  title,
   wikitext,
   lastRevId: 1,
   categories: [],
@@ -190,6 +193,78 @@ describe("runPoll", () => {
     const recorded = vi.mocked(recordAnnounced).mock.calls[0][0];
     expect([...recorded.matchedScopes].sort()).toEqual(["general", "user-1"]);
     expect(recorded.persona).toBe("diceria");
+  });
+
+  describe("dry run", () => {
+    beforeEach(() => {
+      vi.mocked(loadGuildInterests).mockResolvedValue([
+        { scope: "general", keyword: "drowned" },
+        { scope: "user-1", keyword: "drowned" },
+      ]);
+      vi.mocked(composeWindsDispatch).mockResolvedValue({
+        persona: "diceria",
+        relatedKeywords: ["drowned"],
+        headline: "The tide turns",
+        dispatch: "They march again.",
+        reasons: [],
+      });
+    });
+
+    it("posts nothing and writes nothing", async () => {
+      vi.mocked(fetchWindsPages).mockResolvedValue([windsPage(ONE_DROWNED)]);
+      vi.mocked(loadSeenEntryTitles).mockResolvedValue(new Set());
+
+      await runPoll({ backfill: false, dryRun: true });
+
+      expect(composeWindsDispatch).toHaveBeenCalledTimes(1);
+      expect(postChannelMessage).not.toHaveBeenCalled();
+      expect(recordAnnounced).not.toHaveBeenCalled();
+      expect(recordSeenOnly).not.toHaveBeenCalled();
+    });
+
+    it("previews an entry that has already been announced", async () => {
+      vi.mocked(fetchWindsPages).mockResolvedValue([windsPage(ONE_DROWNED)]);
+      vi.mocked(loadSeenEntryTitles).mockResolvedValue(
+        new Set(["War in Alpha"]),
+      );
+
+      await runPoll({ backfill: false, dryRun: true });
+
+      expect(composeWindsDispatch).toHaveBeenCalledTimes(1);
+      expect(postChannelMessage).not.toHaveBeenCalled();
+    });
+
+    it("never baselines, even when nothing has been recorded", async () => {
+      vi.mocked(countAnnouncements).mockResolvedValue(0);
+      vi.mocked(fetchWindsPages).mockResolvedValue([windsPage(TWO_ENTRIES)]);
+      vi.mocked(loadSeenEntryTitles).mockResolvedValue(new Set());
+
+      await runPoll({ backfill: false, dryRun: true });
+
+      expect(recordSeenOnly).not.toHaveBeenCalled();
+    });
+
+    it("composes only up to the limit", async () => {
+      vi.mocked(fetchWindsPages).mockResolvedValue([windsPage(TWO_ENTRIES)]);
+      vi.mocked(loadSeenEntryTitles).mockResolvedValue(new Set());
+
+      await runPoll({ backfill: false, dryRun: true, limit: 1 });
+
+      expect(composeWindsDispatch).toHaveBeenCalledTimes(1);
+    });
+
+    it("watches a named season instead of the newest", async () => {
+      vi.mocked(fetchWindsPages).mockResolvedValue([
+        windsPage(ONE_UNRELATED, "Winds of the World - Spring 226"),
+        windsPage(ONE_DROWNED, "Winds of the World - Autumn 226"),
+      ]);
+      vi.mocked(loadSeenEntryTitles).mockResolvedValue(new Set());
+
+      await runPoll({ backfill: false, dryRun: true, season: "Autumn 226" });
+
+      const composeCall = vi.mocked(composeWindsDispatch).mock.calls[0][0];
+      expect(composeCall.entry.entryTitle).toBe("War in Alpha");
+    });
   });
 
   it("records an unmatched entry as seen-only without posting", async () => {

@@ -32,6 +32,8 @@ import { logEvent } from "@/log";
 const WINDS_TITLE_PREFIX = "Winds of the World - ";
 const MAX_POSTS_PER_RUN = 10;
 const POST_DELAY_MS = 1000;
+const DRY_RUN_LIMIT = 1;
+const PREVIEW_RULE = "-".repeat(72);
 
 const sleep = (milliseconds: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -49,16 +51,54 @@ const requireEnv = (name: string): string => {
   return value;
 };
 
+// Write a dispatch to stdout exactly as it would reach the channel. This is the
+// point of a dry run, so it prints rather than logging a JSON event.
+const printDispatchPreview = (input: {
+  entry: WindsEntry;
+  content: string;
+  embed: unknown;
+  mentionUserIds: string[];
+}): void => {
+  console.log(`\n${PREVIEW_RULE}`);
+  console.log(`WOULD POST for: ${input.entry.entryTitle}`);
+  console.log(
+    `mentions: ${input.mentionUserIds.length > 0 ? input.mentionUserIds.join(", ") : "(none, band-wide only)"}`,
+  );
+  console.log(`${PREVIEW_RULE}\n`);
+  console.log(input.content);
+  console.log(`\nembed:\n${JSON.stringify(input.embed, null, 2)}`);
+  console.log(`${PREVIEW_RULE}\n`);
+};
+
 // The text an entry is matched against: its title, tag line, and body.
 const entryMatchText = (entry: WindsEntry): string =>
   `${entry.entryTitle}\n${entry.displayText ?? ""}\n${entry.tagLine ?? ""}\n${entry.body}`;
 
-export const runPoll = async (input: { backfill: boolean }): Promise<void> => {
+export const runPoll = async (input: {
+  backfill: boolean;
+  // Compose and render everything but post nothing and record nothing, so a
+  // dispatch can be read before any of them reach the channel.
+  dryRun?: boolean;
+  // Watch a named season ("Autumn 226") instead of the newest one. Only useful
+  // alongside dryRun, to preview against a season that has been written.
+  season?: string | null;
+  // How many entries a dry run composes. Each one costs an Anthropic call.
+  limit?: number;
+}): Promise<void> => {
+  const dryRun = input.dryRun ?? false;
+
   const pages = await fetchWindsPages();
-  const latest = selectLatestWinds(pages);
+  const latest = input.season
+    ? pages.find(
+        (page) => page.title === `${WINDS_TITLE_PREFIX}${input.season}`,
+      ) ?? null
+    : selectLatestWinds(pages);
 
   if (!latest) {
-    logEvent("discord_poll_no_winds", { fetched: pages.length });
+    logEvent("discord_poll_no_winds", {
+      fetched: pages.length,
+      requestedSeason: input.season ?? null,
+    });
 
     return;
   }
@@ -79,7 +119,8 @@ export const runPoll = async (input: { backfill: boolean }): Promise<void> => {
 
   // First-ever run, or an explicit backfill: record the season already under way
   // as seen-only and post nothing, so a backlog is never dumped into the channel.
-  if (input.backfill || shouldBaseline(await countAnnouncements())) {
+  // A dry run never baselines, because baselining writes to the database.
+  if (!dryRun && (input.backfill || shouldBaseline(await countAnnouncements()))) {
     let baselined = 0;
     let unwritten = 0;
 
@@ -113,9 +154,13 @@ export const runPoll = async (input: { backfill: boolean }): Promise<void> => {
     return;
   }
 
-  const newEntries = selectNewEntries({ entries, seenTitles });
+  // A dry run ignores what has already been announced, so a written season can be
+  // previewed even though every one of its entries has been seen.
+  const pendingEntries = dryRun
+    ? entries
+    : selectNewEntries({ entries, seenTitles });
 
-  if (newEntries.length === 0) {
+  if (pendingEntries.length === 0) {
     logEvent("discord_poll_no_new_entries", { windsTitle: latest.title });
 
     return;
@@ -128,14 +173,16 @@ export const runPoll = async (input: { backfill: boolean }): Promise<void> => {
   const interests = await loadGuildInterests(guildId);
   const distinctKeywords = [...new Set(interests.map((row) => row.keyword))];
 
+  const postCap = dryRun ? input.limit ?? DRY_RUN_LIMIT : MAX_POSTS_PER_RUN;
+
   let posted = 0;
   let unwritten = 0;
 
-  for (const entry of newEntries) {
-    if (posted >= MAX_POSTS_PER_RUN) {
+  for (const entry of pendingEntries) {
+    if (posted >= postCap) {
       logEvent("discord_poll_cap_reached", {
-        cap: MAX_POSTS_PER_RUN,
-        remaining: newEntries.length - posted,
+        cap: postCap,
+        remaining: pendingEntries.length - posted,
       });
 
       break;
@@ -197,7 +244,10 @@ export const runPoll = async (input: { backfill: boolean }): Promise<void> => {
     ];
 
     if (matchedScopes.length === 0) {
-      await recordSeenOnly(entryRef(entry));
+      if (!dryRun) {
+        await recordSeenOnly(entryRef(entry));
+      }
+
       logEvent("discord_poll_not_relevant", { entryTitle: entry.entryTitle });
 
       continue;
@@ -221,6 +271,14 @@ export const runPoll = async (input: { backfill: boolean }): Promise<void> => {
       matchedKeywords: unionKeywords,
       affected: entry.affected,
     });
+
+    if (dryRun) {
+      printDispatchPreview({ entry, content, embed, mentionUserIds });
+
+      posted += 1;
+
+      continue;
+    }
 
     const message = await postChannelMessage({
       channelId,
@@ -251,7 +309,8 @@ export const runPoll = async (input: { backfill: boolean }): Promise<void> => {
 
   logEvent("discord_poll_done", {
     windsTitle: latest.title,
-    newEntries: newEntries.length,
+    dryRun,
+    newEntries: pendingEntries.length,
     posted,
     unwritten,
   });
