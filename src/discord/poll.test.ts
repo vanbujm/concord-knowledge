@@ -12,7 +12,7 @@ import { fetchSubPage, fetchWindsPages } from "@/discord/fetch-winds";
 import { loadGuildInterests } from "@/discord/interests-store";
 import { runPoll } from "@/discord/poll";
 import type { WikiPage } from "@/ingest/fetch-wiki";
-import { runHybridSearch } from "@/retrieval/hybrid-search";
+import { loadBackground } from "@/discord/background";
 
 vi.mock("@/discord/fetch-winds", () => ({
   fetchWindsPages: vi.fn(),
@@ -36,8 +36,8 @@ vi.mock("@/ingest/upsert", () => ({
     `https://wiki.example/${encodeURIComponent(title)}`,
 }));
 // Retrieval reaches the database and the embedding model, neither of which a unit
-// test should touch.
-vi.mock("@/retrieval/hybrid-search", () => ({ runHybridSearch: vi.fn() }));
+// test should touch. Its own behaviour is covered in background.test.ts.
+vi.mock("@/discord/background", () => ({ loadBackground: vi.fn() }));
 
 const windsPage = (
   wikitext: string,
@@ -91,7 +91,7 @@ describe("runPoll", () => {
     process.env.DISCORD_CHANNEL_ID = "chan-1";
     process.env.DISCORD_BOT_TOKEN = "token";
     vi.mocked(countAnnouncements).mockResolvedValue(EARLIER_SEASONS_RECORDED);
-    vi.mocked(runHybridSearch).mockResolvedValue([]);
+    vi.mocked(loadBackground).mockResolvedValue([]);
     vi.mocked(fetchSubPage).mockImplementation(async (title) =>
       writtenSubPage(title),
     );
@@ -201,20 +201,6 @@ describe("runPoll", () => {
   });
 
   describe("wiki background", () => {
-    const searchResult = (title: string, headingPath = "") => ({
-      chunkId: `chunk-${title}`,
-      title,
-      headingPath,
-      excerpt: `About ${title}.`,
-      highlights: [],
-      sourceUrl: `https://wiki.example/${encodeURIComponent(title)}`,
-      categories: [],
-      realm: null,
-      sphere: null,
-      seasons: [],
-      score: 1,
-    });
-
     beforeEach(() => {
       vi.mocked(fetchWindsPages).mockResolvedValue([windsPage(ONE_DROWNED)]);
       vi.mocked(loadSeenEntryTitles).mockResolvedValue(new Set());
@@ -230,40 +216,29 @@ describe("runPoll", () => {
       });
     });
 
-    it("passes retrieved excerpts to the composer", async () => {
-      vi.mocked(runHybridSearch).mockResolvedValue([
-        searchResult("Lerona Mere", "Regions"),
+    it("hands the retrieved excerpts to the composer", async () => {
+      vi.mocked(loadBackground).mockResolvedValue([
+        { title: "Lerona Mere", headingPath: "Regions", excerpt: "A city." },
       ]);
 
       await runPoll({ backfill: false });
 
       const composeCall = vi.mocked(composeWindsDispatch).mock.calls[0][0];
       expect(composeCall.background).toEqual([
-        {
-          title: "Lerona Mere",
-          headingPath: "Regions",
-          excerpt: "About Lerona Mere.",
-        },
+        { title: "Lerona Mere", headingPath: "Regions", excerpt: "A city." },
       ]);
     });
 
-    it("drops the current Winds page and the entry's own sub-page", async () => {
-      vi.mocked(runHybridSearch).mockResolvedValue([
-        searchResult("Winds of the World - Autumn 226"),
-        searchResult("War in Alpha"),
-        searchResult("Lerona Mere"),
-      ]);
-
+    it("retrieves against the entry's sub-page text", async () => {
       await runPoll({ backfill: false });
 
-      const composeCall = vi.mocked(composeWindsDispatch).mock.calls[0][0];
-      expect(composeCall.background?.map((note) => note.title)).toEqual([
-        "Lerona Mere",
-      ]);
+      const backgroundCall = vi.mocked(loadBackground).mock.calls[0][0];
+      expect(backgroundCall.subPageText).toBe("The body of War in Alpha.");
+      expect(backgroundCall.windsTitle).toBe("Winds of the World - Autumn 226");
     });
 
     it("still posts when retrieval fails", async () => {
-      vi.mocked(runHybridSearch).mockRejectedValue(new Error("pgvector down"));
+      vi.mocked(loadBackground).mockRejectedValue(new Error("pgvector down"));
 
       await runPoll({ backfill: false });
 
@@ -271,66 +246,6 @@ describe("runPoll", () => {
 
       const composeCall = vi.mocked(composeWindsDispatch).mock.calls[0][0];
       expect(composeCall.background).toEqual([]);
-    });
-
-    it("queries the entities the sub-page links to, then the affected parties", async () => {
-      vi.mocked(fetchSubPage).mockResolvedValue({
-        pageId: 2000,
-        title: "War in Alpha",
-        wikitext:
-          "The [[Drowned Host]] march from [[Vidania]], see [[Winds of the World - Summer 223]] and [[File:Map.jpg]].",
-        lastRevId: 1,
-        categories: [],
-      });
-
-      await runPoll({ backfill: false });
-
-      const queries = vi
-        .mocked(runHybridSearch)
-        .mock.calls.map((call) => call[0].query);
-
-      // Other Winds pages and file links are not entities worth retrieving.
-      expect(queries).toEqual(["Drowned Host Vidania", "Lerona Mere"]);
-    });
-
-    it("falls back to the affected parties when nothing is linked", async () => {
-      await runPoll({ backfill: false });
-
-      const queries = vi
-        .mocked(runHybridSearch)
-        .mock.calls.map((call) => call[0].query);
-
-      expect(queries).toEqual(["Lerona Mere"]);
-    });
-
-    it("never offers another Winds page as background", async () => {
-      vi.mocked(runHybridSearch).mockResolvedValue([
-        searchResult("Winds of the World - Summer 223", "War Never Changes"),
-        searchResult("The Drowned"),
-      ]);
-
-      await runPoll({ backfill: false });
-
-      const composeCall = vi.mocked(composeWindsDispatch).mock.calls[0][0];
-      expect(composeCall.background?.map((note) => note.title)).toEqual([
-        "The Drowned",
-      ]);
-    });
-
-    it("keeps one excerpt per page rather than several from one", async () => {
-      vi.mocked(runHybridSearch).mockResolvedValue([
-        searchResult("Lerona Mere", "Regions"),
-        searchResult("Lerona Mere", "History"),
-        searchResult("The Drowned"),
-      ]);
-
-      await runPoll({ backfill: false });
-
-      const composeCall = vi.mocked(composeWindsDispatch).mock.calls[0][0];
-      expect(composeCall.background?.map((note) => note.title)).toEqual([
-        "Lerona Mere",
-        "The Drowned",
-      ]);
     });
   });
 

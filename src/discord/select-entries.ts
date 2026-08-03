@@ -4,6 +4,10 @@ import type { WindsEntry } from "@/discord/parse-winds";
 // Pure selection logic for the Winds poller: which season page to watch, which
 // entries are new, and whether a page is being seen for the first time.
 
+// Shared by everything that has to recognise a Winds page by title, including the
+// retrieval side, which excludes them from background.
+export const WINDS_TITLE_STEM = "Winds of the World";
+
 // Concord holds two summits a year and its in-world seasons do not run in
 // calendar order. The year's first summit is Winter in the 221-224 pages and
 // Autumn from 225 onward; the second is Summer and Spring respectively. The wiki's
