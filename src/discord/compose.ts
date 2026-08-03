@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import * as z from "zod";
 
-import { WORLD_CONTEXT_BRIEF } from "@/discord/character";
+import { CONCORD_GAZETTEER, WORLD_CONTEXT_BRIEF } from "@/discord/character";
 import type { WindsEntry } from "@/discord/parse-winds";
 import { PERSONAS, type PersonaKey } from "@/discord/personas";
 import { cleanWikitext } from "@/ingest/clean-wikitext";
@@ -74,6 +74,7 @@ export const composeWindsDispatch = async (input: {
     "You are one of two ravens who carry news to the warband The Sablier Rouge. Choose whichever raven best fits this entry and write as that one.",
     bothVoiceBriefs(),
     WORLD_CONTEXT_BRIEF,
+    CONCORD_GAZETTEER,
     "You may also be given 'Background from the wiki': excerpts retrieved for the people, places and factions this entry names. Use it to judge relatedness and to get allegiances and geography right, for instance whose realm holds a region under attack. Treat it strictly as reference, not as news: it describes the setting, not this season's events, so never report it as something that has just happened and never quote it.",
     "Write a VERY short `dispatch`: one or two clipped sentences at most, in the chosen raven's voice, and lace it with real crow noises, caws, kraas, dry rattling clicks, low croaks, as if a bird is blurting the gist between calls. Terse and squawky, never a paragraph, never a report. Never use an em dash; use a comma or a full stop. Keep `headline` short too. In `relatedKeywords`, list only the provided keywords the entry genuinely relates to (an empty list if none). In `reasons`, one short phrase per matched keyword.",
   ].join("\n\n");

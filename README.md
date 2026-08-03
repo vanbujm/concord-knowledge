@@ -82,6 +82,8 @@ Two ravens, **Diceria** (rumour) and **Ricordo** (memory), watch the wiki's [Win
 - 🛡️ **`/warband interests`** manages the general tier: `add` / `remove` / `list` the keywords the ravens watch for everyone. Gated to members with **Manage Server** (Administrator included), both by `default_member_permissions` at registration and by re-checking the member's permission bitfield in the handler, since a server admin can re-grant a command under Integrations settings. A general keyword makes an entry post to the channel without @mentioning anyone.
 - 🔎 **`/search`** runs the same hybrid search as the MCP, from Discord, returning a short set of cited results with wiki links.
 
+Known trade-offs and unresolved calls in the ravens' retrieval are recorded in [`docs/known-limitations.md`](docs/known-limitations.md).
+
 Winds posts go out from a Bun job on GitHub Actions (Discord REST, no gateway daemon); slash commands are served by `/api/discord/interactions` on Vercel (Ed25519-verified, deferred for `/search`). Relevance and the ravens' prose use the Anthropic API (`claude-opus-4-8` by default). Register the commands once with `bun run discord:register`.
 
 ## 🧱 Tech stack
