@@ -45,8 +45,14 @@ export const selectNewEntries = (input: {
 }): WindsEntry[] =>
   input.entries.filter((entry) => !input.seenTitles.has(entry.entryTitle));
 
-// A Winds page is baselined the first time it is seen (no rows recorded yet): its
-// current entries are marked seen-only and nothing is posted, so the poller never
-// dumps a whole existing season into the channel on its first run.
-export const shouldBaseline = (existingRowCount: number): boolean =>
-  existingRowCount === 0;
+// Baselining is a first-install guard, not a per-season one. On the very first run
+// (no rows recorded for any season) the season already under way is marked
+// seen-only so the poller does not dump a whole backlog into the channel. Every
+// later season is left unbaselined, because its entries appear while the poller is
+// already watching and each one should be announced as it is published.
+//
+// Deliberately not keyed on the current page: a new season's index page lists all
+// of its entry titles weeks before any of them are written, so treating "no rows
+// for this page" as a backlog would mark the whole season seen and silence it.
+export const shouldBaseline = (totalRowCount: number): boolean =>
+  totalRowCount === 0;

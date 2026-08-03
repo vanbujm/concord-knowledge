@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { composeWindsDispatch } from "@/discord/compose";
 import {
+  countAnnouncements,
   loadSeenEntryTitles,
   recordAnnounced,
   recordSeenOnly,
@@ -19,6 +20,7 @@ vi.mock("@/discord/fetch-winds", () => ({
 vi.mock("@/discord/compose", () => ({ composeWindsDispatch: vi.fn() }));
 vi.mock("@/discord/discord-rest", () => ({ postChannelMessage: vi.fn() }));
 vi.mock("@/discord/dedup", () => ({
+  countAnnouncements: vi.fn(),
   loadSeenEntryTitles: vi.fn(),
   recordSeenOnly: vi.fn(),
   recordAnnounced: vi.fn(),
@@ -63,13 +65,28 @@ const ONE_UNRELATED = `
 Merchants haggle over grain.
 `;
 
+// A written sub-page for any title asked for. An entry whose sub-page is missing
+// is treated as an unwritten placeholder, so "written" is the normal case here.
+const writtenSubPage = (title: string): WikiPage => ({
+  pageId: 2000,
+  title,
+  wikitext: `The body of ${title}.`,
+  lastRevId: 1,
+  categories: [],
+});
+
+const EARLIER_SEASONS_RECORDED = 12;
+
 describe("runPoll", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.DISCORD_GUILD_ID = "guild-1";
     process.env.DISCORD_CHANNEL_ID = "chan-1";
     process.env.DISCORD_BOT_TOKEN = "token";
-    vi.mocked(fetchSubPage).mockResolvedValue(null);
+    vi.mocked(countAnnouncements).mockResolvedValue(EARLIER_SEASONS_RECORDED);
+    vi.mocked(fetchSubPage).mockImplementation(async (title) =>
+      writtenSubPage(title),
+    );
     vi.mocked(postChannelMessage).mockResolvedValue({ id: "msg" });
   });
 
@@ -79,7 +96,8 @@ describe("runPoll", () => {
     delete process.env.DISCORD_BOT_TOKEN;
   });
 
-  it("baselines a first-seen page without posting", async () => {
+  it("baselines on a first-ever run without posting", async () => {
+    vi.mocked(countAnnouncements).mockResolvedValue(0);
     vi.mocked(fetchWindsPages).mockResolvedValue([windsPage(TWO_ENTRIES)]);
     vi.mocked(loadSeenEntryTitles).mockResolvedValue(new Set());
 
@@ -88,6 +106,60 @@ describe("runPoll", () => {
     expect(recordSeenOnly).toHaveBeenCalledTimes(2);
     expect(postChannelMessage).not.toHaveBeenCalled();
     expect(loadGuildInterests).not.toHaveBeenCalled();
+  });
+
+  it("baselines only the entries that have been written", async () => {
+    vi.mocked(countAnnouncements).mockResolvedValue(0);
+    vi.mocked(fetchWindsPages).mockResolvedValue([windsPage(TWO_ENTRIES)]);
+    vi.mocked(loadSeenEntryTitles).mockResolvedValue(new Set());
+    vi.mocked(fetchSubPage).mockImplementation(async (title) =>
+      title === "War in Alpha" ? writtenSubPage(title) : null,
+    );
+
+    await runPoll({ backfill: false });
+
+    expect(recordSeenOnly).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(recordSeenOnly).mock.calls[0][0].entry.entryTitle).toBe(
+      "War in Alpha",
+    );
+  });
+
+  // The index page of a new season lists every entry title weeks before the
+  // sub-pages are written. Baselining then would mark the whole season seen.
+  it("does not baseline a new season once earlier seasons are recorded", async () => {
+    vi.mocked(fetchWindsPages).mockResolvedValue([windsPage(TWO_ENTRIES)]);
+    vi.mocked(loadSeenEntryTitles).mockResolvedValue(new Set());
+    vi.mocked(loadGuildInterests).mockResolvedValue([
+      { scope: "general", keyword: "drowned" },
+    ]);
+    vi.mocked(composeWindsDispatch).mockResolvedValue({
+      persona: "diceria",
+      relatedKeywords: ["drowned"],
+      headline: "News",
+      dispatch: "Caw.",
+      reasons: [],
+    });
+
+    await runPoll({ backfill: false });
+
+    expect(loadGuildInterests).toHaveBeenCalled();
+    expect(postChannelMessage).toHaveBeenCalledTimes(2);
+  });
+
+  it("leaves an unwritten entry unrecorded so a later run can announce it", async () => {
+    vi.mocked(fetchWindsPages).mockResolvedValue([windsPage(TWO_ENTRIES)]);
+    vi.mocked(loadSeenEntryTitles).mockResolvedValue(new Set());
+    vi.mocked(loadGuildInterests).mockResolvedValue([
+      { scope: "general", keyword: "drowned" },
+    ]);
+    vi.mocked(fetchSubPage).mockResolvedValue(null);
+
+    await runPoll({ backfill: false });
+
+    expect(composeWindsDispatch).not.toHaveBeenCalled();
+    expect(postChannelMessage).not.toHaveBeenCalled();
+    expect(recordSeenOnly).not.toHaveBeenCalled();
+    expect(recordAnnounced).not.toHaveBeenCalled();
   });
 
   it("posts a relevant entry and @mentions the personal scope that matched", async () => {

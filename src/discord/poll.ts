@@ -1,5 +1,6 @@
 import { composeWindsDispatch } from "@/discord/compose";
 import {
+  countAnnouncements,
   loadSeenEntryTitles,
   recordAnnounced,
   recordSeenOnly,
@@ -19,6 +20,7 @@ import {
   selectNewEntries,
   shouldBaseline,
 } from "@/discord/select-entries";
+import type { WikiPage } from "@/ingest/fetch-wiki";
 import { sourceUrlForTitle } from "@/ingest/upsert";
 import { logEvent } from "@/log";
 
@@ -75,22 +77,36 @@ export const runPoll = async (input: { backfill: boolean }): Promise<void> => {
     entry,
   });
 
-  // First sight of this page, or an explicit backfill: record the current
-  // entries as seen-only and post nothing, so an existing season is never dumped
-  // into the channel wholesale.
-  if (input.backfill || shouldBaseline(seenTitles.size)) {
+  // First-ever run, or an explicit backfill: record the season already under way
+  // as seen-only and post nothing, so a backlog is never dumped into the channel.
+  if (input.backfill || shouldBaseline(await countAnnouncements())) {
     let baselined = 0;
+    let unwritten = 0;
 
     for (const entry of entries) {
-      if (!seenTitles.has(entry.entryTitle)) {
-        await recordSeenOnly(entryRef(entry));
-        baselined += 1;
+      if (seenTitles.has(entry.entryTitle)) {
+        continue;
       }
+
+      // Only baseline entries that have actually been written. A season's index
+      // page lists every entry title well before the sub-pages exist, and
+      // recording a placeholder as seen would silence it once it is published.
+      const subPage = await fetchSubPage(entry.entryTitle);
+
+      if (!subPage) {
+        unwritten += 1;
+
+        continue;
+      }
+
+      await recordSeenOnly(entryRef(entry));
+      baselined += 1;
     }
 
     logEvent("discord_poll_baselined", {
       windsTitle: latest.title,
       baselined,
+      unwritten,
       total: entries.length,
     });
 
@@ -113,6 +129,7 @@ export const runPoll = async (input: { backfill: boolean }): Promise<void> => {
   const distinctKeywords = [...new Set(interests.map((row) => row.keyword))];
 
   let posted = 0;
+  let unwritten = 0;
 
   for (const entry of newEntries) {
     if (posted >= MAX_POSTS_PER_RUN) {
@@ -129,21 +146,31 @@ export const runPoll = async (input: { backfill: boolean }): Promise<void> => {
       keywords: distinctKeywords,
     });
 
-    let subPageText: string | null = null;
+    let subPage: WikiPage | null = null;
 
     try {
-      const subPage = await fetchSubPage(entry.entryTitle);
-      subPageText = subPage?.wikitext ?? null;
+      subPage = await fetchSubPage(entry.entryTitle);
     } catch (error) {
+      // Leave the entry unrecorded so a later run retries it.
       logEvent("discord_poll_subpage_failed", {
         entryTitle: entry.entryTitle,
         error: errorMessage(error),
       });
+
+      continue;
+    }
+
+    if (!subPage) {
+      // Listed on the index page but not written yet. Recorded nowhere, so the
+      // first run after it is published will announce it.
+      unwritten += 1;
+
+      continue;
     }
 
     const analysis = await composeWindsDispatch({
       entry,
-      subPageText,
+      subPageText: subPage.wikitext,
       keywords: distinctKeywords,
     });
 
@@ -226,5 +253,6 @@ export const runPoll = async (input: { backfill: boolean }): Promise<void> => {
     windsTitle: latest.title,
     newEntries: newEntries.length,
     posted,
+    unwritten,
   });
 };

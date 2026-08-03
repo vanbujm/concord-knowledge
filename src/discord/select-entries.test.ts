@@ -64,7 +64,7 @@ describe("selectNewEntries", () => {
 });
 
 describe("shouldBaseline", () => {
-  it("is true only when nothing has been recorded yet", () => {
+  it("is true only on a first-ever run, across every season", () => {
     expect(shouldBaseline(0)).toBe(true);
     expect(shouldBaseline(3)).toBe(false);
   });

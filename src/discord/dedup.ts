@@ -5,6 +5,11 @@ import type { WindsEntry } from "@/discord/parse-winds";
 // processed, and recording each one as either seen-only (baseline / not
 // relevant) or posted.
 
+// Total rows across every season. Zero means the poller has never completed a
+// run, which is what distinguishes a first-ever install from a new season.
+export const countAnnouncements = async (): Promise<number> =>
+  prisma.windsAnnouncement.count();
+
 export const loadSeenEntryTitles = async (
   windsPageId: number,
 ): Promise<Set<string>> => {
