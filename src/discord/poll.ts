@@ -1,4 +1,7 @@
-import { composeWindsDispatch } from "@/discord/compose";
+import {
+  composeWindsDispatch,
+  type BackgroundNote,
+} from "@/discord/compose";
 import {
   countAnnouncements,
   loadSeenEntryTitles,
@@ -23,16 +26,21 @@ import {
 import type { WikiPage } from "@/ingest/fetch-wiki";
 import { sourceUrlForTitle } from "@/ingest/upsert";
 import { logEvent } from "@/log";
+import { MAX_QUERY_CHARS } from "@/config/display";
+import { runHybridSearch } from "@/retrieval/hybrid-search";
 
 // The scheduled Winds watcher. Fetches the latest Winds of the World page, finds
 // entries it has not seen, judges each against the guild's registered keywords,
 // and posts the relevant ones as a raven-authored embed, @mentioning the members
 // whose personal keywords matched.
 
-const WINDS_TITLE_PREFIX = "Winds of the World - ";
+const WINDS_TITLE_STEM = "Winds of the World";
+const WINDS_TITLE_PREFIX = `${WINDS_TITLE_STEM} - `;
 const MAX_POSTS_PER_RUN = 10;
 const POST_DELAY_MS = 1000;
 const DRY_RUN_LIMIT = 1;
+const BACKGROUND_LIMIT = 5;
+const BACKGROUND_POOL_SIZE = 20;
 const PREVIEW_RULE = "-".repeat(72);
 
 const sleep = (milliseconds: number): Promise<void> =>
@@ -51,6 +59,104 @@ const requireEnv = (name: string): string => {
   return value;
 };
 
+// The pages a sub-page links to are the places, factions and people it talks
+// about, already spelled as wiki titles. That makes them a far better retrieval
+// query than the entry's own title, which mostly retrieves the entry itself.
+const WIKI_LINK = /\[\[([^\]|#]+?)(?:[|#][^\]]*)?\]\]/g;
+const NON_ARTICLE_PREFIXES = ["File:", "Image:", "Category:", "Template:"];
+
+const linkedEntityQuery = (wikitext: string): string => {
+  const seen = new Set<string>();
+  const parts: string[] = [];
+
+  let queryLength = 0;
+
+  for (const match of wikitext.matchAll(WIKI_LINK)) {
+    const title = match[1].trim();
+
+    const skip =
+      !title ||
+      seen.has(title) ||
+      title.startsWith(WINDS_TITLE_STEM) ||
+      NON_ARTICLE_PREFIXES.some((prefix) => title.startsWith(prefix));
+
+    if (skip) {
+      continue;
+    }
+
+    // Keep the query inside the length every surface accepts.
+    if (queryLength + title.length + 1 > MAX_QUERY_CHARS) {
+      break;
+    }
+
+    seen.add(title);
+    parts.push(title);
+    queryLength += title.length + 1;
+  }
+
+  return parts.join(" ");
+};
+
+// Retrieve wiki background for the places and factions an entry names, so the
+// ravens judge relatedness against the setting rather than against the entry's
+// own wording.
+//
+// Two queries, most useful first: the entities the sub-page links to, then the
+// affected realms and councils as a fallback for a sparsely linked entry. Each
+// over-fetches a pool because the strongest hits for an entry are usually the
+// entry's own sub-page, which is already in the prompt in full and so is dropped.
+// Results are deduplicated by page, since retrieval returns chunks and five
+// slices of one page teach the ravens far less than five different pages.
+//
+// Other Winds pages are excluded outright. They are seasonal newsletters, the
+// same kind of document being summarised, so retrieving them invites the ravens
+// to report a previous season's war as though it were this one's.
+const loadBackground = async (input: {
+  entry: WindsEntry;
+  windsTitle: string;
+  subPageText: string;
+}): Promise<BackgroundNote[]> => {
+  const queries = [
+    linkedEntityQuery(input.subPageText),
+    input.entry.affected.join(" "),
+  ].filter((query) => query.length > 0);
+
+  const notesByTitle = new Map<string, BackgroundNote>();
+
+  for (const query of queries) {
+    const results = await runHybridSearch({
+      query,
+      limit: BACKGROUND_POOL_SIZE,
+    });
+
+    for (const result of results) {
+      const alreadyInPrompt =
+        result.title === input.windsTitle ||
+        result.title === input.entry.entryTitle;
+
+      if (
+        alreadyInPrompt ||
+        result.title.startsWith(WINDS_TITLE_STEM) ||
+        notesByTitle.has(result.title)
+      ) {
+        continue;
+      }
+
+      notesByTitle.set(result.title, {
+        title: result.title,
+        headingPath: result.headingPath,
+        excerpt: result.excerpt,
+      });
+    }
+
+    if (notesByTitle.size >= BACKGROUND_LIMIT) {
+      break;
+    }
+  }
+
+  return [...notesByTitle.values()].slice(0, BACKGROUND_LIMIT);
+};
+
 // Write a dispatch to stdout exactly as it would reach the channel. This is the
 // point of a dry run, so it prints rather than logging a JSON event.
 const printDispatchPreview = (input: {
@@ -58,11 +164,24 @@ const printDispatchPreview = (input: {
   content: string;
   embed: unknown;
   mentionUserIds: string[];
+  background: BackgroundNote[];
 }): void => {
   console.log(`\n${PREVIEW_RULE}`);
   console.log(`WOULD POST for: ${input.entry.entryTitle}`);
   console.log(
     `mentions: ${input.mentionUserIds.length > 0 ? input.mentionUserIds.join(", ") : "(none, band-wide only)"}`,
+  );
+  console.log(
+    `background retrieved: ${
+      input.background.length > 0
+        ? `\n${input.background
+            .map(
+              (note) =>
+                `  - ${note.title}${note.headingPath ? ` > ${note.headingPath}` : ""}`,
+            )
+            .join("\n")}`
+        : "(none)"
+    }`,
   );
   console.log(`${PREVIEW_RULE}\n`);
   console.log(input.content);
@@ -215,10 +334,28 @@ export const runPoll = async (input: {
       continue;
     }
 
+    // Background is an accuracy aid, not a requirement: if retrieval fails the
+    // dispatch still goes out, just judged on the entry text alone.
+    let background: BackgroundNote[] = [];
+
+    try {
+      background = await loadBackground({
+        entry,
+        windsTitle: latest.title,
+        subPageText: subPage.wikitext,
+      });
+    } catch (error) {
+      logEvent("discord_poll_background_failed", {
+        entryTitle: entry.entryTitle,
+        error: errorMessage(error),
+      });
+    }
+
     const analysis = await composeWindsDispatch({
       entry,
       subPageText: subPage.wikitext,
       keywords: distinctKeywords,
+      background,
     });
 
     if (!analysis) {
@@ -273,7 +410,13 @@ export const runPoll = async (input: {
     });
 
     if (dryRun) {
-      printDispatchPreview({ entry, content, embed, mentionUserIds });
+      printDispatchPreview({
+        entry,
+        content,
+        embed,
+        mentionUserIds,
+        background,
+      });
 
       posted += 1;
 

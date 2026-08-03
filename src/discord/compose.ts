@@ -39,6 +39,24 @@ const WINDS_SCHEMA = z.object({
 
 export type WindsAnalysis = z.infer<typeof WINDS_SCHEMA>;
 
+// A wiki excerpt retrieved for the people, places and factions an entry names.
+// The world brief alone cannot cover the whole setting, so this supplies the
+// specifics: whose front a region is, who a faction is aligned with.
+export type BackgroundNote = {
+  title: string;
+  headingPath: string;
+  excerpt: string;
+};
+
+const formatBackground = (notes: BackgroundNote[]): string =>
+  notes
+    .map((note) => {
+      const heading = note.headingPath ? ` > ${note.headingPath}` : "";
+
+      return `- ${note.title}${heading}: ${note.excerpt}`;
+    })
+    .join("\n");
+
 const SEARCH_INTRO_SCHEMA = z.object({
   persona: z.enum(["diceria", "ricordo"]),
   intro: z.string(),
@@ -48,12 +66,16 @@ export const composeWindsDispatch = async (input: {
   entry: WindsEntry;
   subPageText: string | null;
   keywords: string[];
+  background?: BackgroundNote[];
 }): Promise<WindsAnalysis | null> => {
+  const background = input.background ?? [];
+
   const system = [
     "You are one of two ravens who carry news to the warband The Sablier Rouge. Choose whichever raven best fits this entry and write as that one.",
     bothVoiceBriefs(),
     WORLD_CONTEXT_BRIEF,
-    "Write a VERY short `dispatch`: one or two clipped sentences at most, in the chosen raven's voice, and lace it with real crow noises — caws, kraas, dry rattling clicks, low croaks — as if a bird is blurting the gist between calls. Terse and squawky, never a paragraph, never a report. Keep `headline` short too. In `relatedKeywords`, list only the provided keywords the entry genuinely relates to (an empty list if none). In `reasons`, one short phrase per matched keyword.",
+    "You may also be given 'Background from the wiki': excerpts retrieved for the people, places and factions this entry names. Use it to judge relatedness and to get allegiances and geography right, for instance whose realm holds a region under attack. Treat it strictly as reference, not as news: it describes the setting, not this season's events, so never report it as something that has just happened and never quote it.",
+    "Write a VERY short `dispatch`: one or two clipped sentences at most, in the chosen raven's voice, and lace it with real crow noises, caws, kraas, dry rattling clicks, low croaks, as if a bird is blurting the gist between calls. Terse and squawky, never a paragraph, never a report. Never use an em dash; use a comma or a full stop. Keep `headline` short too. In `relatedKeywords`, list only the provided keywords the entry genuinely relates to (an empty list if none). In `reasons`, one short phrase per matched keyword.",
   ].join("\n\n");
 
   const entryText = cleanWikitext(input.entry.body);
@@ -67,6 +89,9 @@ export const composeWindsDispatch = async (input: {
     `Keywords to judge relatedness against:\n${input.keywords.map((keyword) => `- ${keyword}`).join("\n")}`,
     `Entry text:\n${entryText}`,
     subPage ? `Full sub-page:\n${subPage}` : null,
+    background.length > 0
+      ? `Background from the wiki:\n${formatBackground(background)}`
+      : null,
   ]
     .filter((part): part is string => part !== null)
     .join("\n\n");

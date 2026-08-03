@@ -12,6 +12,7 @@ import { fetchSubPage, fetchWindsPages } from "@/discord/fetch-winds";
 import { loadGuildInterests } from "@/discord/interests-store";
 import { runPoll } from "@/discord/poll";
 import type { WikiPage } from "@/ingest/fetch-wiki";
+import { runHybridSearch } from "@/retrieval/hybrid-search";
 
 vi.mock("@/discord/fetch-winds", () => ({
   fetchWindsPages: vi.fn(),
@@ -34,6 +35,9 @@ vi.mock("@/ingest/upsert", () => ({
   sourceUrlForTitle: (title: string) =>
     `https://wiki.example/${encodeURIComponent(title)}`,
 }));
+// Retrieval reaches the database and the embedding model, neither of which a unit
+// test should touch.
+vi.mock("@/retrieval/hybrid-search", () => ({ runHybridSearch: vi.fn() }));
 
 const windsPage = (
   wikitext: string,
@@ -87,6 +91,7 @@ describe("runPoll", () => {
     process.env.DISCORD_CHANNEL_ID = "chan-1";
     process.env.DISCORD_BOT_TOKEN = "token";
     vi.mocked(countAnnouncements).mockResolvedValue(EARLIER_SEASONS_RECORDED);
+    vi.mocked(runHybridSearch).mockResolvedValue([]);
     vi.mocked(fetchSubPage).mockImplementation(async (title) =>
       writtenSubPage(title),
     );
@@ -193,6 +198,140 @@ describe("runPoll", () => {
     const recorded = vi.mocked(recordAnnounced).mock.calls[0][0];
     expect([...recorded.matchedScopes].sort()).toEqual(["general", "user-1"]);
     expect(recorded.persona).toBe("diceria");
+  });
+
+  describe("wiki background", () => {
+    const searchResult = (title: string, headingPath = "") => ({
+      chunkId: `chunk-${title}`,
+      title,
+      headingPath,
+      excerpt: `About ${title}.`,
+      highlights: [],
+      sourceUrl: `https://wiki.example/${encodeURIComponent(title)}`,
+      categories: [],
+      realm: null,
+      sphere: null,
+      seasons: [],
+      score: 1,
+    });
+
+    beforeEach(() => {
+      vi.mocked(fetchWindsPages).mockResolvedValue([windsPage(ONE_DROWNED)]);
+      vi.mocked(loadSeenEntryTitles).mockResolvedValue(new Set());
+      vi.mocked(loadGuildInterests).mockResolvedValue([
+        { scope: "general", keyword: "drowned" },
+      ]);
+      vi.mocked(composeWindsDispatch).mockResolvedValue({
+        persona: "diceria",
+        relatedKeywords: ["drowned"],
+        headline: "News",
+        dispatch: "Caw.",
+        reasons: [],
+      });
+    });
+
+    it("passes retrieved excerpts to the composer", async () => {
+      vi.mocked(runHybridSearch).mockResolvedValue([
+        searchResult("Lerona Mere", "Regions"),
+      ]);
+
+      await runPoll({ backfill: false });
+
+      const composeCall = vi.mocked(composeWindsDispatch).mock.calls[0][0];
+      expect(composeCall.background).toEqual([
+        {
+          title: "Lerona Mere",
+          headingPath: "Regions",
+          excerpt: "About Lerona Mere.",
+        },
+      ]);
+    });
+
+    it("drops the current Winds page and the entry's own sub-page", async () => {
+      vi.mocked(runHybridSearch).mockResolvedValue([
+        searchResult("Winds of the World - Autumn 226"),
+        searchResult("War in Alpha"),
+        searchResult("Lerona Mere"),
+      ]);
+
+      await runPoll({ backfill: false });
+
+      const composeCall = vi.mocked(composeWindsDispatch).mock.calls[0][0];
+      expect(composeCall.background?.map((note) => note.title)).toEqual([
+        "Lerona Mere",
+      ]);
+    });
+
+    it("still posts when retrieval fails", async () => {
+      vi.mocked(runHybridSearch).mockRejectedValue(new Error("pgvector down"));
+
+      await runPoll({ backfill: false });
+
+      expect(postChannelMessage).toHaveBeenCalledTimes(1);
+
+      const composeCall = vi.mocked(composeWindsDispatch).mock.calls[0][0];
+      expect(composeCall.background).toEqual([]);
+    });
+
+    it("queries the entities the sub-page links to, then the affected parties", async () => {
+      vi.mocked(fetchSubPage).mockResolvedValue({
+        pageId: 2000,
+        title: "War in Alpha",
+        wikitext:
+          "The [[Drowned Host]] march from [[Vidania]], see [[Winds of the World - Summer 223]] and [[File:Map.jpg]].",
+        lastRevId: 1,
+        categories: [],
+      });
+
+      await runPoll({ backfill: false });
+
+      const queries = vi
+        .mocked(runHybridSearch)
+        .mock.calls.map((call) => call[0].query);
+
+      // Other Winds pages and file links are not entities worth retrieving.
+      expect(queries).toEqual(["Drowned Host Vidania", "Lerona Mere"]);
+    });
+
+    it("falls back to the affected parties when nothing is linked", async () => {
+      await runPoll({ backfill: false });
+
+      const queries = vi
+        .mocked(runHybridSearch)
+        .mock.calls.map((call) => call[0].query);
+
+      expect(queries).toEqual(["Lerona Mere"]);
+    });
+
+    it("never offers another Winds page as background", async () => {
+      vi.mocked(runHybridSearch).mockResolvedValue([
+        searchResult("Winds of the World - Summer 223", "War Never Changes"),
+        searchResult("The Drowned"),
+      ]);
+
+      await runPoll({ backfill: false });
+
+      const composeCall = vi.mocked(composeWindsDispatch).mock.calls[0][0];
+      expect(composeCall.background?.map((note) => note.title)).toEqual([
+        "The Drowned",
+      ]);
+    });
+
+    it("keeps one excerpt per page rather than several from one", async () => {
+      vi.mocked(runHybridSearch).mockResolvedValue([
+        searchResult("Lerona Mere", "Regions"),
+        searchResult("Lerona Mere", "History"),
+        searchResult("The Drowned"),
+      ]);
+
+      await runPoll({ backfill: false });
+
+      const composeCall = vi.mocked(composeWindsDispatch).mock.calls[0][0];
+      expect(composeCall.background?.map((note) => note.title)).toEqual([
+        "Lerona Mere",
+        "The Drowned",
+      ]);
+    });
   });
 
   describe("dry run", () => {
