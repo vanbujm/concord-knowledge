@@ -4,7 +4,15 @@ import type { WindsEntry } from "@/discord/parse-winds";
 // Pure selection logic for the Winds poller: which season page to watch, which
 // entries are new, and whether a page is being seen for the first time.
 
-const SEASON_ORDER = ["Spring", "Summer", "Autumn", "Winter"];
+// Concord holds two summits a year and its in-world seasons do not run in
+// calendar order. The year's first summit is Winter in the 221-224 pages and
+// Autumn from 225 onward; the second is Summer and Spring respectively. The wiki's
+// own index lists them that way (Winter 221, Summer 221, ... Autumn 225, Spring
+// 225, Autumn 226, Spring 226) and the page creation dates agree: Autumn 226 was
+// written in February 2026, Spring 226 in July. Ordering by the calendar would
+// therefore rank Spring 226 as older than Autumn 226 and leave the poller watching
+// the previous season for ever.
+const SEASON_ORDER = ["Winter", "Autumn", "Summer", "Spring"];
 
 // "Winds of the World - Autumn 226" -> a sortable key. Non-seasonal titles
 // (e.g. the "Winds of the World" index page) return null and are skipped.
