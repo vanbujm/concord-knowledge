@@ -22,6 +22,53 @@ No tag line here, only prose.
 * [[Winds of the World|Winds of the World Main Page]]
 `;
 
+// Verbatim excerpt of the Spring 226 index page: entries dropped to level-2
+// headings and most of the links picked up bold wrapping, while "Further Reading"
+// stayed at level 3.
+const SPRING_226_FORMAT = `[[File:Banner.jpg|center|thumb|1063x1063px|Even in the darkest times, there is hope to be found.]]
+
+== '''[[Wet Work - The War in Mancante Terra]]''' ==
+
+* '''The War Chamber / Lerona Mere'''
+
+== [[In Victory: Magnanimity - The War in Mukarrem]] ==
+
+* '''The War Chamber / Andash'''
+
+=== Further Reading ===
+
+* [[Winds of the World]]
+`;
+
+describe("parseWindsEntries across season formats", () => {
+  it("reads level-2 headings with bold-wrapped links", () => {
+    const entries = parseWindsEntries(SPRING_226_FORMAT);
+
+    expect(entries.map((entry) => entry.entryTitle)).toEqual([
+      "Wet Work - The War in Mancante Terra",
+      "In Victory: Magnanimity - The War in Mukarrem",
+    ]);
+  });
+
+  it("keeps the tag line on a bold-wrapped level-2 entry", () => {
+    const [first] = parseWindsEntries(SPRING_226_FORMAT);
+
+    expect(first.displayText).toBeNull();
+    expect(first.tagLine).toBe("The War Chamber / Lerona Mere");
+    expect(first.affected).toEqual(["The War Chamber", "Lerona Mere"]);
+  });
+
+  it("still ignores a level-3 Further Reading heading", () => {
+    const entries = parseWindsEntries(SPRING_226_FORMAT);
+
+    expect(entries).toHaveLength(2);
+  });
+
+  it("does not treat a mismatched heading run as an entry", () => {
+    expect(parseWindsEntries("== [[Lopsided]] ===\n")).toEqual([]);
+  });
+});
+
 describe("parseWindsEntries", () => {
   it("extracts only the link headings, in order", () => {
     const entries = parseWindsEntries(SAMPLE);

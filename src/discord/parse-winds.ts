@@ -1,15 +1,20 @@
 // Parse a raw "Winds of the World" wikitext page into its entries.
 //
-// Each entry is a level-3 heading that is a single wiki link, followed by a bold
+// Each entry is a heading that is a single wiki link, followed by a bold
 // "affected" tag line and some intro prose, e.g.:
 //
 //   === [[Sub-page Title|Display]] ===
 //   * '''The War Chamber / Lerona Mere'''
 //   Intro prose for the entry...
 //
+// The heading level and styling are not consistent between seasons: Autumn 226
+// used level 3 with a bare link, Spring 226 used level 2 and wrapped many of its
+// links in bold ('''). Both levels and the optional bold are therefore accepted,
+// and the opening and closing "=" runs must be the same length.
+//
 // Parsing runs on the RAW wikitext, before cleanWikitext, because cleaning strips
 // the [[link target]] and the ''' bold markers this relies on. Headings that are
-// not a single link (e.g. "=== Further Reading ===") are not entries.
+// not a single link (e.g. "=== Further Reading ===") are not entries at any level.
 
 export type WindsEntry = {
   // The [[link target]]: the canonical title of the linked sub-page.
@@ -24,8 +29,9 @@ export type WindsEntry = {
   body: string;
 };
 
-const ANY_HEADING = /^===\s*(.+?)\s*===\s*$/gm;
-const LINK_ONLY_HEADING = /^\[\[([^\]|]+?)(?:\|([^\]]+?))?\]\]$/;
+const ANY_HEADING = /^(={2,3})\s*(.+?)\s*\1\s*$/gm;
+const LINK_ONLY_HEADING =
+  /^(?:'''\s*)?\[\[([^\]|]+?)(?:\|([^\]]+?))?\]\](?:\s*''')?$/;
 const BOLD_TAG_LINE = /^\*\s*'''(.+?)'''/m;
 
 const splitAffected = (tagLine: string): string[] =>
@@ -41,7 +47,7 @@ export const parseWindsEntries = (wikitext: string): WindsEntry[] => {
 
   for (const match of wikitext.matchAll(ANY_HEADING)) {
     headings.push({
-      text: match[1],
+      text: match[2],
       contentStart: (match.index ?? 0) + match[0].length,
     });
   }
