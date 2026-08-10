@@ -15,6 +15,7 @@ import {
 } from "@/discord/interactions";
 import {
   addInterest,
+  clearPersonalInterest,
   GENERAL_SCOPE,
   listInterests,
   removeInterest,
@@ -109,10 +110,25 @@ const handleWarbandInterests = async (
     const keyword = command.options.keyword ?? "";
     const added = await addInterest({ guildId, scope, keyword });
 
+    // The band keyword supersedes personal copies, which would otherwise ping
+    // their owners for something the whole band already watches.
+    const supersededScopes = await clearPersonalInterest({ guildId, keyword });
+
+    const headline = added
+      ? `Added **${keyword}** to the warband's keywords. The ravens now watch it for everyone.`
+      : `**${keyword}** is already on the warband's list (or was empty).`;
+
+    if (supersededScopes.length === 0) {
+      return ephemeral(headline);
+    }
+
+    const listCount =
+      supersededScopes.length === 1
+        ? "1 personal list"
+        : `${supersededScopes.length} personal lists`;
+
     return ephemeral(
-      added
-        ? `Added **${keyword}** to the warband's keywords. The ravens now watch it for everyone.`
-        : `**${keyword}** is already on the warband's list (or was empty).`,
+      `${headline}\nRemoved it from ${listCount}, since the band keyword already posts it without pinging anyone.`,
     );
   }
 

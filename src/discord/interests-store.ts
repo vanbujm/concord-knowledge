@@ -34,6 +34,46 @@ export const addInterest = async (input: {
   }
 };
 
+// A band-wide keyword supersedes anyone's personal copy of it. The band keyword
+// already posts the entry to the channel, so a personal duplicate adds nothing but
+// a redundant mention: the member is pinged for something the whole band watches.
+// Adding band-wide therefore clears the personal copies rather than refusing.
+//
+// Runs whether or not the band keyword was newly added, so the command also
+// repairs an overlap that already exists.
+//
+// Returns the scopes the keyword was removed from, so the reply can say how many
+// personal lists were touched.
+export const clearPersonalInterest = async (input: {
+  guildId: string;
+  keyword: string;
+}): Promise<string[]> => {
+  const keyword = normalize(input.keyword);
+
+  if (!keyword) {
+    return [];
+  }
+
+  const personalCopies = {
+    guildId: input.guildId,
+    keyword,
+    scope: { not: GENERAL_SCOPE },
+  };
+
+  const rows = await prisma.interest.findMany({
+    where: personalCopies,
+    select: { scope: true },
+  });
+
+  if (rows.length === 0) {
+    return [];
+  }
+
+  await prisma.interest.deleteMany({ where: personalCopies });
+
+  return rows.map((row) => row.scope);
+};
+
 export const removeInterest = async (input: {
   guildId: string;
   scope: string;
