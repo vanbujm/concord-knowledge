@@ -49,8 +49,17 @@ __pycache__/
 # the scraped wiki corpus (regenerable via scripts/sync_wiki.py), the sync
 # tooling, all top-level project markdown (CLAUDE.md, planning docs), and the
 # personal character-planning notes. The public README is the one exception.
+#
+# scripts/ is excluded per-file rather than as a directory, because git does not
+# descend into an excluded directory and so would ignore any negation inside it.
+# The automation scripts are published deliberately: the README tells people to
+# run them, and they have to travel with the repo to be of any use on a new
+# machine. The wiki sync tooling stays local.
 /wiki/
-/scripts/
+/scripts/*
+!/scripts/poll-local.sh
+!/scripts/install-launch-agent.sh
+!/scripts/setup-local-automation.sh
 /*.md
 !/README.md
 /character-notes/
