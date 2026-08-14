@@ -20,6 +20,11 @@ const BROWSER_USER_AGENT =
 const MAX_ATTEMPTS = 4;
 const RETRY_BASE_DELAY_MS = 1500;
 
+// Cloudflare block pages carry a four digit code that names the product that
+// refused the request, e.g. "Error 1015" for rate limiting.
+const CLOUDFLARE_ERROR_CODE = /Error\s*(\d{4})/i;
+const REFUSAL_SNIPPET_LENGTH = 400;
+
 // The API accepts up to 50 page ids per revisions/categories request.
 const PAGE_ID_BATCH_SIZE = 50;
 
@@ -110,6 +115,25 @@ const apiGet = async <Schema extends z.ZodTypeAny>(
       });
 
       if (!response.ok) {
+        // The wiki sits behind Cloudflare, which sometimes refuses this client.
+        // Record how it identified itself, so a failure can be attributed to a
+        // product rather than guessed at: `cf-mitigated` marks a challenge, and
+        // the block pages carry a four digit code (1015 rate limited, 1020
+        // firewall rule, 1010 browser integrity check).
+        const body = await response.text().catch(() => "");
+        const errorCode = body.match(CLOUDFLARE_ERROR_CODE);
+
+        logEvent("wiki_fetch_refused", {
+          url,
+          status: response.status,
+          cfRay: response.headers.get("cf-ray"),
+          cfMitigated: response.headers.get("cf-mitigated"),
+          server: response.headers.get("server"),
+          retryAfter: response.headers.get("retry-after"),
+          cloudflareErrorCode: errorCode ? errorCode[1] : null,
+          bodySnippet: body.slice(0, REFUSAL_SNIPPET_LENGTH),
+        });
+
         throw new Error(`Wiki API returned HTTP ${response.status}`);
       }
 
