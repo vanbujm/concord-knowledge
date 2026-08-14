@@ -1,0 +1,21 @@
+# The poller fetches the wiki over its API, so the local corpus mirror is not
+# needed at runtime and is by far the largest directory here.
+wiki/
+
+node_modules/
+.next/
+.git/
+.github/
+public/
+docs/
+character-notes/
+.agents/
+.claude/
+
+.env
+.env.*
+!.env.example
+
+*.log
+tsconfig.tsbuildinfo
+.DS_Store

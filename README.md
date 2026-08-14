@@ -85,6 +85,14 @@ Two ravens, **Diceria** (rumour) and **Ricordo** (memory), watch the wiki's [Win
 
 Known trade-offs and unresolved calls in the ravens' retrieval are recorded in [`docs/known-limitations.md`](docs/known-limitations.md).
 
+**Polling automatically from a Mac.** The scheduled GitHub Actions job cannot reach the wiki (see [`docs/known-limitations.md`](docs/known-limitations.md)), so the poll runs locally instead. One command sets it up, and is safe to re-run:
+
+```bash
+bash scripts/setup-local-automation.sh
+```
+
+It checks prerequisites, builds the image, installs a launchd agent that polls at 08:07 / 12:07 / 16:07 / 20:07 local, and finishes with a dry run that posts nothing. The work runs in Docker so the same image lifts onto a server later, while scheduling stays with launchd because a missed slot fires once on wake, where cron on a sleeping laptop would drop it. Failures raise a desktop notification rather than passing quietly. Logs land in `~/Library/Logs/concord-ravens.log`.
+
 Winds posts go out from a Bun job on GitHub Actions (Discord REST, no gateway daemon); slash commands are served by `/api/discord/interactions` on Vercel (Ed25519-verified, deferred for `/search`). Relevance and the ravens' prose use the Anthropic API (`claude-opus-4-8` by default). Register the commands once with `bun run discord:register`.
 
 ## 🧱 Tech stack
