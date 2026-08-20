@@ -60,8 +60,15 @@ fi
 
 cd "$REPO_DIR" || fail "Could not enter $REPO_DIR"
 
+# A build failure should not cost a poll. It is usually the registry being
+# briefly unreachable rather than anything wrong with the code, so fall back to
+# the image already built and note it, and only give up when there is none.
 if ! "$DOCKER_BIN" build -q -t "$IMAGE_TAG" . >>"$LOG_FILE" 2>&1; then
-  fail "The ravens image failed to build."
+  if "$DOCKER_BIN" image inspect "$IMAGE_TAG" >/dev/null 2>&1; then
+    echo "$(timestamp) build failed, running the existing image instead" >>"$LOG_FILE"
+  else
+    fail "The ravens image failed to build and none was already built."
+  fi
 fi
 
 # .env is mounted rather than passed with --env-file, because Docker's env-file
