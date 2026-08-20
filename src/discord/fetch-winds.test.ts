@@ -2,7 +2,7 @@ import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
-import { fetchSubPage, fetchWindsPages } from "@/discord/fetch-winds";
+import { fetchSubPages, fetchWindsPages } from "@/discord/fetch-winds";
 
 const API_URL = "https://wiki.concordlarp.com/api.php";
 
@@ -55,34 +55,25 @@ describe("fetchWindsPages", () => {
   });
 });
 
-describe("fetchSubPage", () => {
-  it("returns the exact-title match, ignoring longer neighbours", async () => {
+describe("fetchSubPages", () => {
+  // The whole point of the batched fetch: one request for every title, not one
+  // request per title, which is what drew rate limiting.
+  it("asks for every title in a single request", async () => {
+    let requestCount = 0;
+
     server.use(
       http.get(API_URL, ({ request }) => {
-        const params = new URL(request.url).searchParams;
+        requestCount += 1;
 
-        if (params.get("list") === "allpages") {
-          return HttpResponse.json({
-            query: {
-              allpages: [
-                { pageid: 200, title: "War in Alpha" },
-                { pageid: 201, title: "War in Alpha (Extended Cut)" },
-              ],
-            },
-          });
-        }
-
-        const pageIds = (params.get("pageids") ?? "").split("|");
-        const titles: Record<string, string> = {
-          "200": "War in Alpha",
-          "201": "War in Alpha (Extended Cut)",
-        };
+        const requested = (
+          new URL(request.url).searchParams.get("titles") ?? ""
+        ).split("|");
 
         return HttpResponse.json({
           query: {
-            pages: pageIds.map((pageId) => ({
-              pageid: Number(pageId),
-              title: titles[pageId],
+            pages: requested.map((title, index) => ({
+              pageid: 200 + index,
+              title,
               revisions: [{ revid: 1, slots: { main: { content: "body" } } }],
               categories: [],
             })),
@@ -91,25 +82,42 @@ describe("fetchSubPage", () => {
       }),
     );
 
-    const page = await fetchSubPage("War in Alpha");
+    const pages = await fetchSubPages(["War in Alpha", "War in Beta"]);
 
-    expect(page?.pageId).toBe(200);
-    expect(page?.title).toBe("War in Alpha");
+    expect(requestCount).toBe(1);
+    expect([...pages.keys()].sort()).toEqual(["War in Alpha", "War in Beta"]);
+    expect(pages.get("War in Alpha")?.pageId).toBe(200);
   });
 
-  it("returns null when the exact title is absent", async () => {
+  it("omits titles the wiki does not have", async () => {
     server.use(
-      http.get(API_URL, ({ request }) => {
-        const params = new URL(request.url).searchParams;
-
-        if (params.get("list") === "allpages") {
-          return HttpResponse.json({ query: { allpages: [] } });
-        }
-
-        return HttpResponse.json({ query: { pages: [] } });
-      }),
+      http.get(API_URL, () =>
+        HttpResponse.json({
+          query: {
+            pages: [
+              {
+                pageid: 200,
+                title: "War in Alpha",
+                revisions: [
+                  { revid: 1, slots: { main: { content: "body" } } },
+                ],
+                categories: [],
+              },
+              // How the wiki reports a title it has never had.
+              { title: "Not Written Yet", missing: true },
+            ],
+          },
+        }),
+      ),
     );
 
-    expect(await fetchSubPage("Nonexistent Page")).toBeNull();
+    const pages = await fetchSubPages(["War in Alpha", "Not Written Yet"]);
+
+    expect([...pages.keys()]).toEqual(["War in Alpha"]);
+    expect(pages.has("Not Written Yet")).toBe(false);
+  });
+
+  it("sends no request at all for an empty title list", async () => {
+    expect((await fetchSubPages([])).size).toBe(0);
   });
 });

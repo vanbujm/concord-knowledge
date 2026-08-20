@@ -25,8 +25,40 @@ const RETRY_BASE_DELAY_MS = 1500;
 const CLOUDFLARE_ERROR_CODE = /Error\s*(\d{4})/i;
 const REFUSAL_SNIPPET_LENGTH = 400;
 
+// However long a Retry-After asks for, never sit longer than this: a wildly large
+// value would otherwise stall a run indefinitely.
+const MAX_RETRY_AFTER_MS = 30_000;
+
+// Retry-After is either a whole number of seconds or an HTTP date. Null when the
+// header is absent or unparseable, so the caller falls back to its own backoff.
+// Exported for direct unit testing.
+export const parseRetryAfterMs = (header: string | null): number | null => {
+  if (!header) {
+    return null;
+  }
+
+  const seconds = Number(header);
+
+  if (Number.isFinite(seconds)) {
+    // A zero means "retry immediately", but a moment's pause is kinder and stops
+    // a tight loop against a wiki that has just asked us to slow down.
+    return Math.min(Math.max(seconds, 1) * 1000, MAX_RETRY_AFTER_MS);
+  }
+
+  const retryAt = Date.parse(header);
+
+  if (Number.isNaN(retryAt)) {
+    return null;
+  }
+
+  return Math.min(Math.max(retryAt - Date.now(), 0), MAX_RETRY_AFTER_MS);
+};
+
 // The API accepts up to 50 page ids per revisions/categories request.
 const PAGE_ID_BATCH_SIZE = 50;
+
+// The wiki API accepts 50 titles per query for an unauthenticated client.
+const PAGE_TITLE_BATCH_SIZE = 50;
 
 const pageStubSchema = z.object({
   pageid: z.number(),
@@ -45,8 +77,12 @@ const allPagesResponseSchema = z.object({
   continue: z.record(z.string(), z.string()).optional(),
 });
 
-const pageContentSchema = z.object({
-  pageid: z.number(),
+// The broad shape: a page as a query returns it. Asking by title yields an entry
+// for every title requested, and a title the wiki does not have arrives flagged
+// `missing` with no page id at all.
+const queriedPageSchema = z.object({
+  pageid: z.number().optional(),
+  missing: z.boolean().optional(),
   title: z.string(),
   revisions: z
     .array(
@@ -63,9 +99,18 @@ const pageContentSchema = z.object({
   categories: z.array(z.object({ title: z.string() })).optional(),
 });
 
+// Narrower: a page asked for by id necessarily exists, so it always has one.
+const pageContentSchema = queriedPageSchema.required({ pageid: true });
+
 const pageContentsResponseSchema = z.object({
   query: z.object({
     pages: z.array(pageContentSchema),
+  }),
+});
+
+const titledPagesResponseSchema = z.object({
+  query: z.object({
+    pages: z.array(queriedPageSchema),
   }),
 });
 
@@ -108,6 +153,10 @@ const apiGet = async <Schema extends z.ZodTypeAny>(
 
   let lastError: unknown = null;
 
+  // When the wiki rate-limits us it says how long to wait. Honour that instead of
+  // the usual backoff, which is shorter and only spends more of the budget.
+  let retryAfterMs: number | null = null;
+
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
     try {
       const response = await fetch(url, {
@@ -122,6 +171,9 @@ const apiGet = async <Schema extends z.ZodTypeAny>(
         // firewall rule, 1010 browser integrity check).
         const body = await response.text().catch(() => "");
         const errorCode = body.match(CLOUDFLARE_ERROR_CODE);
+        const retryAfterHeader = response.headers.get("retry-after");
+
+        retryAfterMs = parseRetryAfterMs(retryAfterHeader);
 
         logEvent("wiki_fetch_refused", {
           url,
@@ -129,7 +181,7 @@ const apiGet = async <Schema extends z.ZodTypeAny>(
           cfRay: response.headers.get("cf-ray"),
           cfMitigated: response.headers.get("cf-mitigated"),
           server: response.headers.get("server"),
-          retryAfter: response.headers.get("retry-after"),
+          retryAfter: retryAfterHeader,
           cloudflareErrorCode: errorCode ? errorCode[1] : null,
           bodySnippet: body.slice(0, REFUSAL_SNIPPET_LENGTH),
         });
@@ -144,7 +196,8 @@ const apiGet = async <Schema extends z.ZodTypeAny>(
       lastError = requestError;
 
       if (attempt < MAX_ATTEMPTS - 1) {
-        await delay(RETRY_BASE_DELAY_MS * (attempt + 1));
+        await delay(retryAfterMs ?? RETRY_BASE_DELAY_MS * (attempt + 1));
+        retryAfterMs = null;
       }
     }
   }
@@ -225,7 +278,15 @@ export const fetchPagesByPrefix = async (
   return fetchPageContents(stubs);
 };
 
-const normalizePage = (page: z.infer<typeof pageContentSchema>): WikiPage => {
+// Null when the wiki has no such page, which only a title query can produce: a
+// page asked for by id always exists.
+const normalizePage = (
+  page: z.infer<typeof queriedPageSchema>,
+): WikiPage | null => {
+  if (page.missing || page.pageid === undefined) {
+    return null;
+  }
+
   const revision = page.revisions?.[0];
 
   const categories = (page.categories ?? []).map((category) =>
@@ -268,7 +329,11 @@ export const fetchPageContents = async (
     );
 
     for (const page of data.query.pages) {
-      pages.push(normalizePage(page));
+      const normalized = normalizePage(page);
+
+      if (normalized) {
+        pages.push(normalized);
+      }
     }
 
     logEvent("wiki_fetch_contents_progress", {
@@ -278,6 +343,53 @@ export const fetchPageContents = async (
   }
 
   return pages;
+};
+
+// Fetch many pages by exact title in one query per 50 titles, keyed by title.
+//
+// The alternative, a prefix search per title, costs one request each: checking a
+// season's eighteen Winds entries that way is eighteen requests every run, which
+// is what drew HTTP 429 rate limiting from the wiki. This does it in one.
+//
+// Titles the wiki does not have are simply absent from the map, which is how a
+// caller tells an unwritten page from a written one.
+export const fetchPagesByTitles = async (
+  titles: string[],
+): Promise<Map<string, WikiPage>> => {
+  const pagesByTitle = new Map<string, WikiPage>();
+
+  if (titles.length === 0) {
+    return pagesByTitle;
+  }
+
+  for (const batch of chunkIntoBatches(titles, PAGE_TITLE_BATCH_SIZE)) {
+    const data = await apiGet(
+      {
+        action: "query",
+        titles: batch.join("|"),
+        prop: "revisions|categories",
+        rvprop: "content|ids",
+        rvslots: "main",
+        cllimit: "max",
+      },
+      titledPagesResponseSchema,
+    );
+
+    for (const page of data.query.pages) {
+      const normalized = normalizePage(page);
+
+      if (normalized) {
+        pagesByTitle.set(normalized.title, normalized);
+      }
+    }
+  }
+
+  logEvent("wiki_fetch_titles_done", {
+    requested: titles.length,
+    found: pagesByTitle.size,
+  });
+
+  return pagesByTitle;
 };
 
 // Fetch only each page's latest revision id (no wikitext), keyed by page id.

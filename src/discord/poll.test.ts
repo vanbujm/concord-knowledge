@@ -8,7 +8,7 @@ import {
   recordSeenOnly,
 } from "@/discord/dedup";
 import { postChannelMessage } from "@/discord/discord-rest";
-import { fetchSubPage, fetchWindsPages } from "@/discord/fetch-winds";
+import { fetchSubPages, fetchWindsPages } from "@/discord/fetch-winds";
 import { loadGuildInterests } from "@/discord/interests-store";
 import { runPoll } from "@/discord/poll";
 import type { WikiPage } from "@/ingest/fetch-wiki";
@@ -16,7 +16,7 @@ import { loadBackground } from "@/discord/background";
 
 vi.mock("@/discord/fetch-winds", () => ({
   fetchWindsPages: vi.fn(),
-  fetchSubPage: vi.fn(),
+  fetchSubPages: vi.fn(),
 }));
 vi.mock("@/discord/compose", () => ({ composeWindsDispatch: vi.fn() }));
 vi.mock("@/discord/discord-rest", () => ({ postChannelMessage: vi.fn() }));
@@ -74,13 +74,19 @@ Merchants haggle over grain.
 
 // A written sub-page for any title asked for. An entry whose sub-page is missing
 // is treated as an unwritten placeholder, so "written" is the normal case here.
-const writtenSubPage = (title: string): WikiPage => ({
-  pageId: 2000,
-  title,
-  wikitext: `The body of ${title}.`,
-  lastRevId: 1,
-  categories: [],
-});
+const writtenPages = (titles: string[]): Map<string, WikiPage> =>
+  new Map(
+    titles.map((title) => [
+      title,
+      {
+        pageId: 2000,
+        title,
+        wikitext: `The body of ${title}.`,
+        lastRevId: 1,
+        categories: [],
+      },
+    ]),
+  );
 
 const EARLIER_SEASONS_RECORDED = 12;
 
@@ -92,8 +98,8 @@ describe("runPoll", () => {
     process.env.DISCORD_BOT_TOKEN = "token";
     vi.mocked(countAnnouncements).mockResolvedValue(EARLIER_SEASONS_RECORDED);
     vi.mocked(loadBackground).mockResolvedValue([]);
-    vi.mocked(fetchSubPage).mockImplementation(async (title) =>
-      writtenSubPage(title),
+    vi.mocked(fetchSubPages).mockImplementation(async (titles) =>
+      writtenPages(titles),
     );
     vi.mocked(postChannelMessage).mockResolvedValue({ id: "msg" });
   });
@@ -120,8 +126,8 @@ describe("runPoll", () => {
     vi.mocked(countAnnouncements).mockResolvedValue(0);
     vi.mocked(fetchWindsPages).mockResolvedValue([windsPage(TWO_ENTRIES)]);
     vi.mocked(loadSeenEntryTitles).mockResolvedValue(new Set());
-    vi.mocked(fetchSubPage).mockImplementation(async (title) =>
-      title === "War in Alpha" ? writtenSubPage(title) : null,
+    vi.mocked(fetchSubPages).mockImplementation(async (titles) =>
+      writtenPages(titles.filter((title) => title === "War in Alpha")),
     );
 
     await runPoll({ backfill: false });
@@ -160,7 +166,7 @@ describe("runPoll", () => {
     vi.mocked(loadGuildInterests).mockResolvedValue([
       { scope: "general", keyword: "drowned" },
     ]);
-    vi.mocked(fetchSubPage).mockResolvedValue(null);
+    vi.mocked(fetchSubPages).mockResolvedValue(new Map());
 
     await runPoll({ backfill: false });
 

@@ -7,7 +7,9 @@ import {
   fetchAllPageStubs,
   fetchPageContents,
   fetchPageRevisions,
+  fetchPagesByTitles,
   fetchWikiPages,
+  parseRetryAfterMs,
 } from "@/ingest/fetch-wiki";
 
 const API_URL = "https://wiki.concordlarp.com/api.php";
@@ -17,6 +19,74 @@ const server = setupServer();
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
+
+describe("parseRetryAfterMs", () => {
+  it("reads a delay given in seconds", () => {
+    expect(parseRetryAfterMs("5")).toBe(5000);
+  });
+
+  // The wiki sends Retry-After: 0. Pausing briefly is kinder than looping
+  // straight back into a service that has just asked us to slow down.
+  it("floors a zero delay at a second", () => {
+    expect(parseRetryAfterMs("0")).toBe(1000);
+  });
+
+  it("caps an implausibly long delay", () => {
+    expect(parseRetryAfterMs("99999")).toBe(30_000);
+  });
+
+  it("falls back to null when there is no usable header", () => {
+    expect(parseRetryAfterMs(null)).toBeNull();
+    expect(parseRetryAfterMs("")).toBeNull();
+    expect(parseRetryAfterMs("soon")).toBeNull();
+  });
+
+  it("accepts an HTTP date", () => {
+    const soon = new Date(Date.now() + 4000).toUTCString();
+
+    const parsed = parseRetryAfterMs(soon);
+
+    expect(parsed).toBeGreaterThan(0);
+    expect(parsed).toBeLessThanOrEqual(30_000);
+  });
+});
+
+describe("fetchPagesByTitles", () => {
+  it("retries a rate-limited request and succeeds", async () => {
+    let attempts = 0;
+
+    server.use(
+      http.get(API_URL, () => {
+        attempts += 1;
+
+        if (attempts === 1) {
+          return new HttpResponse("<html>Error 1015</html>", {
+            status: 429,
+            headers: { "retry-after": "1", server: "cloudflare" },
+          });
+        }
+
+        return HttpResponse.json({
+          query: {
+            pages: [
+              {
+                pageid: 300,
+                title: "War in Alpha",
+                revisions: [{ revid: 7, slots: { main: { content: "body" } } }],
+                categories: [],
+              },
+            ],
+          },
+        });
+      }),
+    );
+
+    const pages = await fetchPagesByTitles(["War in Alpha"]);
+
+    expect(attempts).toBe(2);
+    expect(pages.get("War in Alpha")?.lastRevId).toBe(7);
+  });
+});
 
 describe("chunkIntoBatches", () => {
   it("splits into fixed-size batches with a final remainder", () => {

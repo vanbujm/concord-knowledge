@@ -10,7 +10,7 @@ import {
   recordSeenOnly,
 } from "@/discord/dedup";
 import { postChannelMessage } from "@/discord/discord-rest";
-import { fetchSubPage, fetchWindsPages } from "@/discord/fetch-winds";
+import { fetchSubPages, fetchWindsPages } from "@/discord/fetch-winds";
 import {
   GENERAL_SCOPE,
   loadGuildInterests,
@@ -142,17 +142,16 @@ export const runPoll = async (input: {
     let baselined = 0;
     let unwritten = 0;
 
-    for (const entry of entries) {
-      if (seenTitles.has(entry.entryTitle)) {
-        continue;
-      }
+    const unseen = entries.filter((entry) => !seenTitles.has(entry.entryTitle));
+    const writtenPages = await fetchSubPages(
+      unseen.map((entry) => entry.entryTitle),
+    );
 
+    for (const entry of unseen) {
       // Only baseline entries that have actually been written. A season's index
       // page lists every entry title well before the sub-pages exist, and
       // recording a placeholder as seen would silence it once it is published.
-      const subPage = await fetchSubPage(entry.entryTitle);
-
-      if (!subPage) {
+      if (!writtenPages.has(entry.entryTitle)) {
         unwritten += 1;
 
         continue;
@@ -193,6 +192,12 @@ export const runPoll = async (input: {
 
   const postCap = dryRun ? input.limit ?? DRY_RUN_LIMIT : MAX_POSTS_PER_RUN;
 
+  // One query for every candidate's sub-page, rather than one per entry inside
+  // the loop. A whole season used to cost eighteen requests a run.
+  const subPages = await fetchSubPages(
+    pendingEntries.map((entry) => entry.entryTitle),
+  );
+
   let posted = 0;
   let unwritten = 0;
 
@@ -211,19 +216,7 @@ export const runPoll = async (input: {
       keywords: distinctKeywords,
     });
 
-    let subPage: WikiPage | null = null;
-
-    try {
-      subPage = await fetchSubPage(entry.entryTitle);
-    } catch (error) {
-      // Leave the entry unrecorded so a later run retries it.
-      logEvent("discord_poll_subpage_failed", {
-        entryTitle: entry.entryTitle,
-        error: errorMessage(error),
-      });
-
-      continue;
-    }
+    const subPage = subPages.get(entry.entryTitle);
 
     if (!subPage) {
       // Listed on the index page but not written yet. Recorded nowhere, so the
