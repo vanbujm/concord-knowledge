@@ -10,7 +10,7 @@
 # Pinned by digest, not just by tag. A bare tag makes BuildKit ask the registry to
 # resolve it on every build, so two scheduled runs failed outright when Docker Hub
 # was briefly unreachable. A digest can be satisfied from the local image.
-FROM oven/bun:1.3.9@sha256:856da45d07aeb62eb38ea3e7f9e1794c0143a4ff63efb00e6c4491b627e2a521
+FROM oven/bun:1.4.4@sha256:1d22548f177f4ff38e0c15baa3c2c46c6c2060ba2d1bc573bb4720b407548f1d
 
 WORKDIR /app
 
